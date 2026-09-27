@@ -35,7 +35,7 @@
  */
 dependencies {
     // Matches the NotEnoughItems version shipped in GT-New-Horizons-Modpack.
-    devOnlyNonPublishable("com.github.GTNewHorizons:NotEnoughItems:2.8.149-GTNH:dev")
+    devOnlyNonPublishable("com.github.GTNewHorizons:NotEnoughItems:2.8.150-GTNH:dev")
 
     // GregTech: compiled against for GUIColorOverride (resource-pack theme colours) and pulled
     // into the dev runtime so we can exercise GT machine / fluid / multiblock recipe handlers.

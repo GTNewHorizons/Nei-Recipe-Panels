@@ -13,8 +13,8 @@
 		"logoFile": "",
 		"screenshots": [],
 		"parent": "",
-		"requiredMods": ["NotEnoughItems@[2.8.149,)"],
-		"dependencies": ["NotEnoughItems@[2.8.149,)"],
+		"requiredMods": ["NotEnoughItems@[2.8.150,)"],
+		"dependencies": ["NotEnoughItems@[2.8.150,)"],
 		"dependants": [],
 		"useDependencyInformation": true
 	}]
