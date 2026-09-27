@@ -46,7 +46,7 @@ public class RecipePanelItemRenderer implements IItemRenderer {
         GL11.glColor4f(1F, 1F, 1F, 1F);
         try {
             RenderItem.getInstance()
-                .renderItemIntoGUI(mc.fontRenderer, mc.getTextureManager(), result, 0, 0);
+                .renderItemAndEffectIntoGUI(mc.fontRenderer, mc.getTextureManager(), result, 0, 0);
         } catch (Throwable t) {
             NeiRecipePanels.LOG.warn("Recipe panel: could not render result icon", t);
         }
