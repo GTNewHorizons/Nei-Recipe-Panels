@@ -1,15 +1,20 @@
 package com.neirecipepanels.client;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 
 import com.neirecipepanels.RecipeSnapshot;
+import com.neirecipepanels.ResolvedRecipe;
 
 import codechicken.nei.recipe.GuiCraftingRecipe;
 import codechicken.nei.recipe.GuiRecipe;
 import codechicken.nei.recipe.GuiUsageRecipe;
 import codechicken.nei.recipe.Recipe;
+import codechicken.nei.recipe.RecipeHandlerRef;
 
 /** Opens a panel's recipe (or its usage) in NEI, navigating to the exact recipe via the stored RecipeId. */
 public final class PanelRecipeOpener {
@@ -21,6 +26,8 @@ public final class PanelRecipeOpener {
         Recipe.RecipeId id = RecipeSnapshot.parseRecipeId(RecipeSnapshot.peekRecipeId(snapshot));
         if (id == null) return;
 
+        System.out.println("Opening recipe for snapshot: " + snapshot);
+
         ItemStack result = id.getResult();
         if (result == null) return;
 
@@ -29,7 +36,7 @@ public final class PanelRecipeOpener {
             return;
         }
 
-        if (GuiCraftingRecipe.openRecipeGui("recipeId", result, id)) {
+        if (GuiCraftingRecipe.openRecipeGui("recipeId", result, id, shownIngredients(snapshot, id))) {
             return;
         }
 
@@ -39,5 +46,23 @@ public final class PanelRecipeOpener {
         Minecraft.getMinecraft()
             .displayGuiScreen(gui);
         gui.openTargetRecipe(id);
+    }
+
+    /** Ingredients as the panel shows them: the stored permutation of each slot. */
+    private static List<ItemStack> shownIngredients(NBTTagCompound snapshot, Recipe.RecipeId id) {
+        List<ItemStack> ingredients = new ArrayList<>();
+        try {
+            RecipeHandlerRef ref = RecipeHandlerRef.of(id);
+            if (ref != null && ref.handler != null) {
+                ResolvedRecipe resolved = ResolvedRecipe
+                    .of(ref.handler, ref.recipeIndex, RecipeSnapshot.readFromNBT(snapshot), id);
+                for (ResolvedRecipe.Slot slot : resolved.ingredients) {
+                    ingredients.add(slot.stack);
+                }
+            }
+        } catch (Throwable t) {
+            // handler lookup failed: open without the shown ingredients
+        }
+        return ingredients;
     }
 }
