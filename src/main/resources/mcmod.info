@@ -6,15 +6,15 @@
 		"description": "NEI add-on: turn a recipe shown in NEI into a wall-mounted recipe panel.",
 		"version": "${modVersion}",
 		"mcversion": "${minecraftVersion}",
-		"url": "https://github.com/K44tz/nei-recipe-panels",
+		"url": "https://github.com/GTNewHorizons/nei-recipe-panels",
 		"updateUrl": "",
 		"authorList": ["K44tz"],
 		"credits": "Built on the GTNH ExampleMod template.",
 		"logoFile": "",
 		"screenshots": [],
 		"parent": "",
-		"requiredMods": ["NotEnoughItems@[2.8.150,)"],
-		"dependencies": ["NotEnoughItems@[2.8.150,)"],
+		"requiredMods": ["NotEnoughItems@[2.8.152,)"],
+		"dependencies": ["NotEnoughItems@[2.8.152,)"],
 		"dependants": [],
 		"useDependencyInformation": true
 	}]

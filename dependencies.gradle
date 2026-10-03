@@ -34,22 +34,25 @@
  * For more details, see https://docs.gradle.org/8.0.1/userguide/java_library_plugin.html#sec:java_library_configurations_graph
  */
 dependencies {
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
     // Matches the NotEnoughItems version shipped in GT-New-Horizons-Modpack.
-    devOnlyNonPublishable("com.github.GTNewHorizons:NotEnoughItems:2.8.155-GTNH:dev")
+    implementation("com.github.GTNewHorizons:NotEnoughItems:2.8.155-GTNH:dev")
 
-    // GregTech: compiled against for GUIColorOverride (resource-pack theme colours) and pulled
-    // into the dev runtime so we can exercise GT machine / fluid / multiblock recipe handlers.
-    // Version matches GT-New-Horizons-Modpack. Not published as a dependency of this mod; the
-    // panel renderer degrades to hard-coded colours when GregTech is absent.
-    devOnlyNonPublishable("com.github.GTNewHorizons:GT5-Unofficial:5.09.54.200:dev")
+    // Development recipes; rendering has no GregTech dependency.
+    runtimeOnlyNonPublishable("com.github.GTNewHorizons:GT5-Unofficial:5.09.54.200:dev")
 
-    devOnlyNonPublishable("com.github.GTNewHorizons:Avaritia:1.99:dev")
+    runtimeOnlyNonPublishable("com.github.GTNewHorizons:Avaritia:1.99:dev")
 
-    // Waila: compiled against so hovering a panel's rendered items reports them through Waila's
-    // stack-override hook. Not published; the registration is a no-op IMC message when absent.
+    // Optional Waila integration, registered through IMC.
     devOnlyNonPublishable("com.github.GTNewHorizons:waila:1.19.34:dev")
 
-    // Spark: profiler, for runClient only - not used by any of our code. The "fat-dev" build is
-    // a self-contained, already-deobfuscated jar (bundles spark-common and its dependencies).
+    // Development profiler.
     runtimeOnlyNonPublishable("GTNewHorizons:spark-forge1710:v0.0.16:1.10-SNAPSHOT-fat-dev")
+}
+
+configurations.testRuntimeClasspath {
+    exclude(group: "com.github.GTNewHorizons", module: "GT5-Unofficial")
+    exclude(group: "com.github.GTNewHorizons", module: "Avaritia")
+    exclude(group: "GTNewHorizons", module: "spark-forge1710")
 }
