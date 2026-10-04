@@ -103,7 +103,7 @@ public final class RecipeResolver {
                         GuiRecipeTab.getHandlerInfo(handler)
                             .getHandlerName()))
                     continue;
-                if (snapshot.version() == RecipeSnapshot.VERSION && !snapshot.handlerId()
+                if (!snapshot.handlerId()
                     .equals(handler.getHandlerId())) continue;
                 for (int index = 0; index < handler.numRecipes(); index++) {
                     if (++checked > MAX_CANDIDATES) throw new IllegalArgumentException("Too many recipe candidates");
@@ -171,7 +171,6 @@ public final class RecipeResolver {
     }
 
     private static boolean matchesOutputs(List<PositionedStack> outputs, List<NBTTagCompound> identities) {
-        if (identities.isEmpty()) return true;
         if (identities.size() != outputs.size()) return false;
         List<RecipeSnapshot.Selection> choices = new ArrayList<>();
         for (NBTTagCompound identity : identities) choices.add(new RecipeSnapshot.Selection(0, 0, identity));

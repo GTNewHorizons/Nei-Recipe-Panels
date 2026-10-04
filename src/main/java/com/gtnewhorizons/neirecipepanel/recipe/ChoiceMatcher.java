@@ -26,7 +26,7 @@ public final class ChoiceMatcher {
         for (int pass = 0; pass < 2; pass++) {
             for (int slot = 0; slot < slots.size(); slot++) {
                 Slot target = slots.get(slot);
-                boolean samePosition = target.x == choice.x && target.y == choice.y;
+                boolean samePosition = target.x == choice.x() && target.y == choice.y();
                 if (visited[slot] || samePosition != (pass == 0) || !target.identities.contains(identity)) continue;
                 visited[slot] = true;
                 if (owners[slot] == -1 || assign(owners[slot], choices, slots, owners, visited)) {

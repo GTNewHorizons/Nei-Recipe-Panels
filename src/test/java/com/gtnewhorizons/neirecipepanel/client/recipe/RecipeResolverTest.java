@@ -278,26 +278,16 @@ class RecipeResolverTest {
     }
 
     @Test
-    void legacyPermutationIndexesDoNotPretendToRecoverSelectedIdentities() {
+    void obsoleteSnapshotVersionsAreInvalidEvenWhenTheRecipeStillExists() {
         Handler current = handler(recipe(slot(fixture.stack(first, 3)), slot(fixture.stack(output, 8))));
         NBTTagCompound legacy = document(current);
         legacy.setInteger("ver", 3);
-        legacy.removeTag("inputs");
-        legacy.removeTag("result");
-        legacy.removeTag("other");
-        legacy.removeTag("outputs");
-        legacy.setIntArray("inPerms", new int[] { 7 });
 
         RecipeResolver.Resolution resolution = resolver(current).resolveFresh(legacy);
 
-        assertEquals(RecipeResolver.Status.CHOICES_ADJUSTED, resolution.status());
-        assertStack(
-            first,
-            3,
-            resolution.recipe()
-                .inputs()
-                .get(0).item);
-        assertStack(output, 8, resolution.displayResult());
+        assertEquals(RecipeResolver.Status.INVALID, resolution.status());
+        assertNull(resolution.recipe());
+        assertNull(resolution.displayResult());
     }
 
     @Test

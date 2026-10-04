@@ -7,6 +7,7 @@ import java.util.List;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
 
+import com.github.bsideup.jabel.Desugar;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -15,30 +16,20 @@ import com.gtnewhorizons.neirecipepanel.network.BoundedNbt;
 /** Durable recipe locator and selected identities; quantities and presentation remain live NEI data. */
 public final class RecipeSnapshot {
 
-    public static final int VERSION = 4;
+    public static final int VERSION = 1;
     public static final int MAX_SLOTS = 256;
     private static final int MAX_RECIPE_ID = 12000;
 
     private final NBTTagCompound document;
-    private final int version;
     private final List<Selection> ingredients;
     private final List<Selection> others;
     private final Selection result;
 
     private RecipeSnapshot(NBTTagCompound document) {
         this.document = (NBTTagCompound) document.copy();
-        version = document.getInteger("ver");
-        ingredients = readSelections(document, version == 2 ? "ingredients" : "inputs", version == 2);
-        others = readSelections(document, version == 2 ? "others" : "other", version == 2);
-        result = document.hasKey("result", 10)
-            ? version == 2
-                ? new Selection(
-                    document.getInteger("rx"),
-                    document.getInteger("ry"),
-                    document.getCompoundTag("result"),
-                    true)
-                : Selection.read(document.getCompoundTag("result"), false)
-            : null;
+        ingredients = readSelections(document, "inputs");
+        others = readSelections(document, "other");
+        result = document.hasKey("result", 10) ? Selection.read(document.getCompoundTag("result")) : null;
     }
 
     public static RecipeSnapshot create(String handlerId, String recipeId, List<Selection> ingredients,
@@ -58,10 +49,9 @@ public final class RecipeSnapshot {
 
     public static RecipeSnapshot readFromNBT(NBTTagCompound tag) {
         if (tag == null || !tag.hasKey("ver", 3) || !tag.hasKey("recipeId", 8)) return null;
-        int version = tag.getInteger("ver");
-        if (version < 2 || version > VERSION || !validRecipeId(tag.getString("recipeId"))) return null;
+        if (tag.getInteger("ver") != VERSION || !validRecipeId(tag.getString("recipeId"))) return null;
         if (!BoundedNbt.isWithinLimit(tag, BoundedNbt.MAX_BYTES)) return null;
-        if (version == VERSION && (!tag.hasKey("handlerId", 8) || tag.getString("handlerId")
+        if (!tag.hasKey("handlerId", 8) || tag.getString("handlerId")
             .isEmpty()
             || tag.getString("handlerId")
                 .length() > 256
@@ -69,12 +59,7 @@ public final class RecipeSnapshot {
             || !validSelections(tag, "other", MAX_SLOTS)
             || !validOutputs(tag)
             || (tag.hasKey("result")
-                && (!tag.hasKey("result", 10) || !Selection.isValid(tag.getCompoundTag("result"))))))
-            return null;
-        if (version == 2 && (!validLegacySelections(tag, "ingredients") || !validLegacySelections(tag, "others")))
-            return null;
-        if (version == 3
-            && (tag.getIntArray("inPerms").length > MAX_SLOTS || tag.getIntArray("otherPerms").length > MAX_SLOTS))
+                && (!tag.hasKey("result", 10) || !Selection.isValid(tag.getCompoundTag("result")))))
             return null;
         return new RecipeSnapshot(tag);
     }
@@ -100,10 +85,6 @@ public final class RecipeSnapshot {
 
     public String handlerId() {
         return document.getString("handlerId");
-    }
-
-    public int version() {
-        return version;
     }
 
     public List<Selection> ingredients() {
@@ -217,15 +198,10 @@ public final class RecipeSnapshot {
         return true;
     }
 
-    private static boolean validLegacySelections(NBTTagCompound tag, String key) {
-        return !tag.hasKey(key) || (compoundList(tag, key) && tag.getTagList(key, 10)
-            .tagCount() <= MAX_SLOTS);
-    }
-
-    private static List<Selection> readSelections(NBTTagCompound tag, String key, boolean legacy) {
+    private static List<Selection> readSelections(NBTTagCompound tag, String key) {
         List<Selection> selections = new ArrayList<>();
         NBTTagList list = tag.getTagList(key, 10);
-        for (int i = 0; i < list.tagCount(); i++) selections.add(Selection.read(list.getCompoundTagAt(i), legacy));
+        for (int i = 0; i < list.tagCount(); i++) selections.add(Selection.read(list.getCompoundTagAt(i)));
         return Collections.unmodifiableList(selections);
     }
 
@@ -235,24 +211,16 @@ public final class RecipeSnapshot {
         return list;
     }
 
-    public static final class Selection {
-
-        public final int x;
-        public final int y;
-        public final boolean legacyItemStack;
-        private final NBTTagCompound identity;
+    @Desugar
+    public record Selection(int x, int y, NBTTagCompound identity) {
 
         public Selection(int x, int y, NBTTagCompound identity) {
-            this(x, y, identity, false);
-        }
-
-        private Selection(int x, int y, NBTTagCompound identity, boolean legacyItemStack) {
             this.x = x;
             this.y = y;
             this.identity = (NBTTagCompound) identity.copy();
-            this.legacyItemStack = legacyItemStack;
         }
 
+        @Override
         public NBTTagCompound identity() {
             return (NBTTagCompound) identity.copy();
         }
@@ -265,8 +233,8 @@ public final class RecipeSnapshot {
             return tag;
         }
 
-        private static Selection read(NBTTagCompound tag, boolean legacy) {
-            return new Selection(tag.getInteger("x"), tag.getInteger("y"), tag.getCompoundTag("s"), legacy);
+        private static Selection read(NBTTagCompound tag) {
+            return new Selection(tag.getInteger("x"), tag.getInteger("y"), tag.getCompoundTag("s"));
         }
 
         private static boolean isValid(NBTTagCompound tag) {

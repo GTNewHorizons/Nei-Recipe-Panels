@@ -38,6 +38,7 @@ class MakeRecipePanelMessageTest {
         NBTTagCompound accepted = decode(snapshot);
 
         assertNotNull(accepted);
+        assertEquals(1, accepted.getInteger("ver"));
         assertEquals(
             81,
             RecipeSnapshot.readFromNBT(accepted)

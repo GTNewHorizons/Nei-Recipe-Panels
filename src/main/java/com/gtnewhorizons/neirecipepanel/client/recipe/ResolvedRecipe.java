@@ -36,7 +36,7 @@ public final class ResolvedRecipe {
     }
 
     public void refresh() {
-        choicesAdjusted = snapshot.version() == 3;
+        choicesAdjusted = false;
         inputs = reconcile(handler.getIngredientStacks(index), snapshot.ingredients());
         List<PositionedStack> otherStacks = handler.getOtherStacks(index);
         if (handler instanceof FurnaceRecipeHandler && FurnaceRecipeHandler.afuels != null
@@ -103,22 +103,13 @@ public final class ResolvedRecipe {
 
     private List<PositionedStack> reconcile(List<PositionedStack> live, List<RecipeSnapshot.Selection> saved) {
         if (live == null) live = Collections.emptyList();
-        List<RecipeSnapshot.Selection> choices = new ArrayList<>();
-        for (RecipeSnapshot.Selection choice : saved) {
-            if (!choice.legacyItemStack) choices.add(choice);
-            else {
-                NBTTagCompound identity = StackIdentity.of(ItemStack.loadItemStackFromNBT(choice.identity()));
-                if (identity == null) choicesAdjusted = true;
-                else choices.add(new RecipeSnapshot.Selection(choice.x, choice.y, identity));
-            }
-        }
         List<ChoiceMatcher.Slot> slots = new ArrayList<>();
         for (PositionedStack slot : live) {
             List<NBTTagCompound> identities = new ArrayList<>();
             for (ItemStack item : slot.items) identities.add(StackIdentity.of(item));
             slots.add(new ChoiceMatcher.Slot(slot.relx, slot.rely, identities));
         }
-        int[] owners = ChoiceMatcher.match(choices, slots);
+        int[] owners = ChoiceMatcher.match(saved, slots);
         List<PositionedStack> selected = new ArrayList<>();
         int matched = 0;
         for (int slotIndex = 0; slotIndex < live.size(); slotIndex++) {
@@ -128,7 +119,7 @@ public final class ResolvedRecipe {
             int alternative = 0;
             if (owner >= 0) {
                 matched++;
-                NBTTagCompound identity = choices.get(owner)
+                NBTTagCompound identity = saved.get(owner)
                     .identity();
                 for (int i = 0; i < slot.items.length; i++) {
                     if (identity.equals(StackIdentity.of(slot.items[i]))) {
@@ -140,8 +131,7 @@ public final class ResolvedRecipe {
             if (slot.items.length > 0) slot.setPermutationToRender(alternative);
             selected.add(slot);
         }
-        if (matched != choices.size()
-            || (snapshot.version() == RecipeSnapshot.VERSION && live.size() != saved.size())) {
+        if (matched != saved.size() || live.size() != saved.size()) {
             choicesAdjusted = true;
         }
         return Collections.unmodifiableList(selected);
