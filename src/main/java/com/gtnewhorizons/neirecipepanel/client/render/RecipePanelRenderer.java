@@ -7,7 +7,6 @@ import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.tileentity.TileEntitySpecialRenderer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.StatCollector;
 import net.minecraft.util.Vec3;
 import net.minecraftforge.common.util.ForgeDirection;
 
@@ -68,12 +67,11 @@ public class RecipePanelRenderer extends TileEntitySpecialRenderer {
 
     private static void drawStatus(String key, float halfWidth, float halfHeight) {
         FontRenderer font = Minecraft.getMinecraft().fontRenderer;
-        String text = font.trimStringToWidth(StatCollector.translateToLocal(key), 168);
         GL11.glTranslatef(-halfWidth, halfHeight, 0.001F);
         GL11.glScalef(MAX_EXTENT / 176, -MAX_EXTENT / 176, 1);
         GL11.glEnable(GL11.GL_TEXTURE_2D);
         GL11.glColor4f(1, 1, 1, 1);
-        font.drawString(text, (176 - font.getStringWidth(text)) / 2, 84, 0x404040);
+        PanelStatusText.draw(font, key, 176, 176, 0x404040);
     }
 
     private static void drawQuad(float halfW, float halfH, int rgb) {

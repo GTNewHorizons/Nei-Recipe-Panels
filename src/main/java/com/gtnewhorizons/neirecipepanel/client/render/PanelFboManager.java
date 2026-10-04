@@ -13,7 +13,6 @@ import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.MovingObjectPosition;
-import net.minecraft.util.StatCollector;
 import net.minecraft.util.Vec3;
 import net.minecraft.world.World;
 
@@ -393,8 +392,7 @@ public final class PanelFboManager {
                 if (backgroundOnly) widget.drawBackground();
                 else widget.draw(-10000, -10000);
             } else {
-                String status = font.trimStringToWidth(StatCollector.translateToLocal(statusKey()), width - 16);
-                font.drawString(status, (width - font.getStringWidth(status)) / 2, height / 2, 0x404040);
+                PanelStatusText.draw(font, statusKey(), width, height, settings.transparent ? 0xFFFFFF : 0x404040);
             }
             finishImage();
         }
