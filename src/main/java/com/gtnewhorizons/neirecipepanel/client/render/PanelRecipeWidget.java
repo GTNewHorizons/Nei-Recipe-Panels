@@ -9,6 +9,8 @@ import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 
+import org.lwjgl.opengl.GL11;
+
 import com.gtnewhorizons.neirecipepanel.client.recipe.ResolvedRecipe;
 
 import codechicken.nei.PositionedStack;
@@ -83,6 +85,7 @@ final class PanelRecipeWidget extends RecipeWidget {
         int depth = contextDepth();
         mc.currentScreen = screen;
         try {
+            GL11.glColor4f(1, 1, 1, 1);
             super.draw(mouseX, mouseY);
         } finally {
             layers.layer = Layer.COMPLETE;

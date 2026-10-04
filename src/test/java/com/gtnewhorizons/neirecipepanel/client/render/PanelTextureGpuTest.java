@@ -4,19 +4,25 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.settings.GameSettings;
 import net.minecraft.init.Blocks;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.util.ResourceLocation;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -30,6 +36,13 @@ import org.lwjgl.opengl.GL14;
 import org.lwjgl.opengl.Pbuffer;
 import org.lwjgl.opengl.PixelFormat;
 
+import com.gtnewhorizons.neirecipepanel.client.recipe.ResolvedRecipe;
+import com.gtnewhorizons.neirecipepanel.recipe.RecipeSnapshot;
+
+import codechicken.lib.gui.GuiDraw;
+import codechicken.nei.PositionedStack;
+import codechicken.nei.recipe.IRecipeHandler;
+import codechicken.nei.recipe.TemplateRecipeHandler;
 import cpw.mods.fml.common.Loader;
 import sun.misc.Unsafe;
 
@@ -50,7 +63,9 @@ class PanelTextureGpuTest {
         Minecraft minecraft = (Minecraft) unsafe.allocateInstance(Minecraft.class);
         minecraft.gameSettings = new GameSettings();
         minecraft.gameSettings.fboEnable = true;
+        minecraft.fontRenderer = (FontRenderer) unsafe.allocateInstance(FixtureFontRenderer.class);
         replace(Minecraft.class, "theMinecraft", minecraft);
+        replace(GuiDraw.class, "fontRenderer", minecraft.fontRenderer);
         replace(Loader.class, "instance", unsafe.allocateInstance(Loader.class));
         Class.forName(Blocks.class.getName());
         replace(Blocks.class, "water", new Block(Material.water) {});
@@ -192,6 +207,98 @@ class PanelTextureGpuTest {
             try (RenderState ignored = new RenderState()) {
                 texture.dispose();
             }
+        }
+    }
+
+    @Test
+    void recipeBackgroundDoesNotInheritTitleColour() throws ReflectiveOperationException {
+        TemplateRecipeHandler handler = new UntintedBackgroundHandler();
+        NBTTagCompound output = new NBTTagCompound();
+        output.setString("strId", "fixture:result");
+        RecipeSnapshot snapshot = RecipeSnapshot.create(
+            handler.getHandlerId(),
+            "{\"handlerName\":\"fixture\",\"ingredients\":[],\"result\":{\"strId\":\"fixture:result\"}}",
+            Collections.emptyList(),
+            null,
+            Collections.emptyList(),
+            Collections.singletonList(output));
+        Constructor<ResolvedRecipe> constructor = ResolvedRecipe.class
+            .getDeclaredConstructor(IRecipeHandler.class, int.class, RecipeSnapshot.class);
+        constructor.setAccessible(true);
+        PanelRecipeWidget widget = new PanelRecipeWidget(constructor.newInstance(handler, 0, snapshot));
+        PanelTexture texture = new PanelTexture();
+        try {
+            for (boolean backgroundOnly : new boolean[] { false, true }) {
+                texture.render(SIDE, () -> {
+                    GL11.glColor4f(64 / 255F, 64 / 255F, 64 / 255F, 1);
+                    if (backgroundOnly) widget.drawBackground();
+                    else widget.draw(-10000, -10000);
+                });
+                assertArrayEquals(new int[] { 200, 160, 120, 128 }, readCentre(texture));
+            }
+        } finally {
+            try (RenderState ignored = new RenderState()) {
+                texture.dispose();
+            }
+        }
+    }
+
+    private static final class UntintedBackgroundHandler extends TemplateRecipeHandler {
+
+        @Override
+        public String getRecipeName() {
+            return "Fixture";
+        }
+
+        @Override
+        public String getGuiTexture() {
+            return "";
+        }
+
+        @Override
+        public int getRecipeHeight(int recipe) {
+            return SIDE;
+        }
+
+        @Override
+        public List<PositionedStack> getIngredientStacks(int recipe) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<PositionedStack> getOtherStacks(int recipe) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public PositionedStack getResultStack(int recipe) {
+            return null;
+        }
+
+        @Override
+        public void drawBackground(int recipe) {
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, source);
+            drawQuad();
+        }
+
+        @Override
+        public void drawForeground(int recipe) {}
+    }
+
+    private static final class FixtureFontRenderer extends FontRenderer {
+
+        private FixtureFontRenderer() {
+            super(null, new ResourceLocation("fixture:font"), null, false);
+        }
+
+        @Override
+        public int getStringWidth(String text) {
+            return text.length() * 6;
+        }
+
+        @Override
+        public String trimStringToWidth(String text, int width) {
+            return text.substring(0, Math.min(text.length(), Math.max(0, width / 6)));
         }
     }
 
