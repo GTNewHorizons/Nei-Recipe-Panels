@@ -16,14 +16,23 @@ import org.lwjgl.opengl.GL30;
 import org.lwjgl.opengl.GL32;
 import org.lwjgl.opengl.GLContext;
 
+import com.gtnewhorizons.neirecipepanel.NEIRecipePanelsMod;
+
 import codechicken.nei.guihook.GuiContainerManager;
 
 /** Restores the incoming render target and state, including stacks left unbalanced by a handler. */
 final class RenderState implements AutoCloseable {
 
+    /** Above every attrib and matrix stack limit; a depth query that never settles must not hang the client. */
+    private static final int MAX_POPS = 64;
+    private static final int ATTRIB = 0;
+    private static final int CLIENT_ATTRIB = 1;
+    private static final int MATRIX = 2;
+    private static boolean warnedUnsettled;
+
     private final int matrixMode = GL11.glGetInteger(GL11.GL_MATRIX_MODE);
-    private final int attributes = AttributeStackDepth.attributes();
-    private final int clientAttributes = AttributeStackDepth.clientAttributes();
+    private final int attributes = GL11.glGetInteger(GL11.GL_ATTRIB_STACK_DEPTH);
+    private final int clientAttributes = GL11.glGetInteger(GL11.GL_CLIENT_ATTRIB_STACK_DEPTH);
     private final int activeTexture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
     private final MatrixState projection = new MatrixState(
         GL11.GL_PROJECTION,
@@ -34,21 +43,15 @@ final class RenderState implements AutoCloseable {
         GL11.GL_MODELVIEW_MATRIX,
         GL11.GL_MODELVIEW_STACK_DEPTH);
     private final MatrixState[] textures = captureTextureMatrices();
-    private final boolean separateTargets = GLContext.getCapabilities().OpenGL30
-        || GLContext.getCapabilities().GL_ARB_framebuffer_object;
     private final int framebuffer = OpenGlHelper.framebufferSupported ? GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING)
         : 0;
-    private final int readFramebuffer = OpenGlHelper.framebufferSupported && separateTargets
+    private final int readFramebuffer = OpenGlHelper.framebufferSupported && Context.separateTargets
         ? GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING)
         : framebuffer;
     private final int renderbuffer = OpenGlHelper.framebufferSupported ? GL11.glGetInteger(GL30.GL_RENDERBUFFER_BINDING)
         : 0;
-    private final boolean legacyTextureTargets = !GLContext.getCapabilities().OpenGL32
-        || (GL11.glGetInteger(GL32.GL_CONTEXT_PROFILE_MASK) & GL32.GL_CONTEXT_COMPATIBILITY_PROFILE_BIT) != 0;
-    private final boolean coreShaders = GLContext.getCapabilities().OpenGL20;
-    private final boolean arbShaders = GLContext.getCapabilities().GL_ARB_shader_objects;
-    private final int program = coreShaders ? GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM)
-        : arbShaders ? ARBShaderObjects.glGetHandleARB(ARBShaderObjects.GL_PROGRAM_OBJECT_ARB) : 0;
+    private final int program = Context.coreShaders ? GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM)
+        : Context.arbShaders ? ARBShaderObjects.glGetHandleARB(ARBShaderObjects.GL_PROGRAM_OBJECT_ARB) : 0;
     private final float brightnessX = OpenGlHelper.lastBrightnessX;
     private final float brightnessY = OpenGlHelper.lastBrightnessY;
     private final float itemZ = RenderItem.getInstance().zLevel;
@@ -78,7 +81,7 @@ final class RenderState implements AutoCloseable {
             GL11.glDisable(GL11.GL_TEXTURE_1D);
             GL11.glDisable(GL11.GL_TEXTURE_2D);
             GL11.glDisable(GL12.GL_TEXTURE_3D);
-            if (legacyTextureTargets) GL11.glDisable(GL13.GL_TEXTURE_CUBE_MAP);
+            if (Context.legacyTextureTargets) GL11.glDisable(GL13.GL_TEXTURE_CUBE_MAP);
             GL11.glDisable(GL11.GL_TEXTURE_GEN_S);
             GL11.glDisable(GL11.GL_TEXTURE_GEN_T);
             GL11.glDisable(GL11.GL_TEXTURE_GEN_R);
@@ -101,16 +104,16 @@ final class RenderState implements AutoCloseable {
             OpenGlHelper.setActiveTexture(GL13.GL_TEXTURE0 + unit);
             textures[unit].restore();
         }
-        while (AttributeStackDepth.clientAttributes() > clientAttributes) GL11.glPopClientAttrib();
-        while (AttributeStackDepth.attributes() > attributes + 1) GL11.glPopAttrib();
+        popTo(GL11.GL_CLIENT_ATTRIB_STACK_DEPTH, clientAttributes, CLIENT_ATTRIB);
+        popTo(GL11.GL_ATTRIB_STACK_DEPTH, attributes + 1, ATTRIB);
         if (OpenGlHelper.framebufferSupported) {
-            if (separateTargets) {
+            if (Context.separateTargets) {
                 OpenGlHelper.func_153171_g(GL30.GL_DRAW_FRAMEBUFFER, framebuffer);
                 OpenGlHelper.func_153171_g(GL30.GL_READ_FRAMEBUFFER, readFramebuffer);
             } else OpenGlHelper.func_153171_g(OpenGlHelper.field_153198_e, framebuffer);
             OpenGlHelper.func_153176_h(OpenGlHelper.field_153199_f, renderbuffer);
         }
-        while (AttributeStackDepth.attributes() > attributes) GL11.glPopAttrib();
+        popTo(GL11.GL_ATTRIB_STACK_DEPTH, attributes, ATTRIB);
         OpenGlHelper.setActiveTexture(activeTexture);
         GL11.glMatrixMode(matrixMode);
         useProgram(program);
@@ -121,49 +124,87 @@ final class RenderState implements AutoCloseable {
         GuiContainerManager.drawItems.renderWithColor = neiItemColor;
     }
 
+    private static void popTo(int depthProperty, int depth, int stack) {
+        for (int pops = 0; GL11.glGetInteger(depthProperty) > depth; pops++) {
+            if (pops == MAX_POPS) {
+                if (!warnedUnsettled) {
+                    warnedUnsettled = true;
+                    NEIRecipePanelsMod.LOG.warn(
+                        "Recipe panel: GL stack depth query 0x{} did not settle after {} pops",
+                        Integer.toHexString(depthProperty),
+                        MAX_POPS);
+                }
+                return;
+            }
+            if (stack == ATTRIB) GL11.glPopAttrib();
+            else if (stack == CLIENT_ATTRIB) GL11.glPopClientAttrib();
+            else GL11.glPopMatrix();
+        }
+    }
+
     private void useProgram(int program) {
-        if (coreShaders) GL20.glUseProgram(program);
-        else if (arbShaders) ARBShaderObjects.glUseProgramObjectARB(program);
+        if (Context.coreShaders) GL20.glUseProgram(program);
+        else if (Context.arbShaders) ARBShaderObjects.glUseProgramObjectARB(program);
     }
 
     private MatrixState[] captureTextureMatrices() {
-        int units = Math.max(1, GL11.glGetInteger(GL13.GL_MAX_TEXTURE_UNITS));
+        int units = Context.textureUnits;
         MatrixState[] matrices = new MatrixState[units];
         for (int unit = 0; unit < units; unit++) {
             OpenGlHelper.setActiveTexture(GL13.GL_TEXTURE0 + unit);
             matrices[unit] = new MatrixState(GL11.GL_TEXTURE, GL11.GL_TEXTURE_MATRIX, GL11.GL_TEXTURE_STACK_DEPTH);
         }
         OpenGlHelper.setActiveTexture(activeTexture);
+        GL11.glMatrixMode(matrixMode);
         return matrices;
+    }
+
+    private static final class Context {
+
+        private static final boolean separateTargets = GLContext.getCapabilities().OpenGL30
+            || GLContext.getCapabilities().GL_ARB_framebuffer_object;
+        private static final boolean legacyTextureTargets = !GLContext.getCapabilities().OpenGL32
+            || (GL11.glGetInteger(GL32.GL_CONTEXT_PROFILE_MASK) & GL32.GL_CONTEXT_COMPATIBILITY_PROFILE_BIT) != 0;
+        private static final boolean coreShaders = GLContext.getCapabilities().OpenGL20;
+        private static final boolean arbShaders = GLContext.getCapabilities().GL_ARB_shader_objects;
+        private static final int textureUnits = Math.max(1, GL11.glGetInteger(GL13.GL_MAX_TEXTURE_UNITS));
     }
 
     private static final class MatrixState {
 
+        private static final FloatBuffer scratch = BufferUtils.createFloatBuffer(16);
+
         private final int mode;
         private final int depthProperty;
-        private final FloatBuffer[] matrices;
+        private final int levels;
+        private final float[] matrices;
 
+        /** Leaves the matrix mode at {@code mode}; the owner restores it once after all captures. */
         private MatrixState(int mode, int matrixProperty, int depthProperty) {
             this.mode = mode;
             this.depthProperty = depthProperty;
-            int previousMode = GL11.glGetInteger(GL11.GL_MATRIX_MODE);
             GL11.glMatrixMode(mode);
-            matrices = new FloatBuffer[GL11.glGetInteger(depthProperty)];
-            for (int level = matrices.length - 1; level >= 0; level--) {
-                matrices[level] = BufferUtils.createFloatBuffer(16);
-                GL11.glGetFloat(matrixProperty, matrices[level]);
+            levels = GL11.glGetInteger(depthProperty);
+            matrices = new float[levels * 16];
+            for (int level = levels - 1; level >= 0; level--) {
+                scratch.clear();
+                GL11.glGetFloat(matrixProperty, scratch);
+                scratch.clear();
+                scratch.get(matrices, level * 16, 16);
                 if (level > 0) GL11.glPopMatrix();
             }
             restore();
-            GL11.glMatrixMode(previousMode);
         }
 
         private void restore() {
             GL11.glMatrixMode(mode);
-            while (GL11.glGetInteger(depthProperty) > 1) GL11.glPopMatrix();
-            for (int level = 0; level < matrices.length; level++) {
+            popTo(depthProperty, 1, MATRIX);
+            for (int level = 0; level < levels; level++) {
                 if (level > 0) GL11.glPushMatrix();
-                GL11.glLoadMatrix(matrices[level]);
+                scratch.clear();
+                scratch.put(matrices, level * 16, 16);
+                scratch.flip();
+                GL11.glLoadMatrix(scratch);
             }
         }
     }
