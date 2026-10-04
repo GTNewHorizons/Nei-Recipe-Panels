@@ -22,6 +22,7 @@ import com.gtnewhorizons.neirecipepanel.client.gui.GuiRecipePanelConfig;
 import com.gtnewhorizons.neirecipepanel.client.gui.PanelInputHandler;
 import com.gtnewhorizons.neirecipepanel.client.gui.PanelRecipeOpener;
 import com.gtnewhorizons.neirecipepanel.client.recipe.RecipeResolver;
+import com.gtnewhorizons.neirecipepanel.client.render.PanelDrawBatch;
 import com.gtnewhorizons.neirecipepanel.client.render.PanelFboManager;
 import com.gtnewhorizons.neirecipepanel.client.render.RecipePanelItemRenderer;
 import com.gtnewhorizons.neirecipepanel.client.render.RecipePanelRenderer;
@@ -52,6 +53,10 @@ public class ClientProxy extends CommonProxy {
     public void init(FMLInitializationEvent event) {
         super.init(event);
         ClientRegistry.bindTileEntitySpecialRenderer(RecipePanelTile.class, new RecipePanelRenderer());
+        MinecraftForge.EVENT_BUS.register(PanelDrawBatch.INSTANCE);
+        FMLCommonHandler.instance()
+            .bus()
+            .register(PanelDrawBatch.INSTANCE);
         MinecraftForgeClient.registerItemRenderer(ModItems.recipePanel, new RecipePanelItemRenderer());
         GuiContainerManager.addInputHandler(new PanelInputHandler());
         ((IReloadableResourceManager) Minecraft.getMinecraft()

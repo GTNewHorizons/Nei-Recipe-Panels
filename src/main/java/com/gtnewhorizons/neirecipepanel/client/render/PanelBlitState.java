@@ -13,7 +13,11 @@ final class PanelBlitState implements AutoCloseable {
     private final float brightnessY = OpenGlHelper.lastBrightnessY;
 
     PanelBlitState() {
-        GL11.glPushAttrib(GL11.GL_CURRENT_BIT | GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT | GL11.GL_TEXTURE_BIT);
+        GL11.glPushAttrib(
+            GL11.GL_CURRENT_BIT | GL11.GL_ENABLE_BIT
+                | GL11.GL_COLOR_BUFFER_BIT
+                | GL11.GL_DEPTH_BUFFER_BIT
+                | GL11.GL_TEXTURE_BIT);
         GL11.glPushClientAttrib(GL11.GL_CLIENT_VERTEX_ARRAY_BIT);
         OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
         GL11.glMatrixMode(GL11.GL_TEXTURE);

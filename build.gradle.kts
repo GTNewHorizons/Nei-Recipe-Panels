@@ -8,6 +8,17 @@ minecraft {
 }
 
 tasks.test {
-    useJUnitPlatform()
+    useJUnitPlatform { excludeTags("gpu") }
     classpath += sourceSets.main.get().compileClasspath
+}
+
+tasks.register<Test>("gpuTest") {
+    group = "verification"
+    description = "Checks panel pixels and render-state restoration using an OpenGL context."
+    dependsOn("extractNatives2")
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = tasks.test.get().classpath
+    useJUnitPlatform { includeTags("gpu") }
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(8)) })
+    systemProperty("java.library.path", file("run/natives/lwjgl2").absolutePath)
 }

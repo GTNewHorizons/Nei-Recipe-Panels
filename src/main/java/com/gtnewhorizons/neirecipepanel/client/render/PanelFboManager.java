@@ -12,7 +12,9 @@ import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.util.StatCollector;
+import net.minecraft.util.Vec3;
 import net.minecraft.world.World;
 
 import org.lwjgl.opengl.GL11;
@@ -36,20 +38,23 @@ public final class PanelFboManager {
     private static final long MAX_TEXTURE_BYTES = 96L * 1024 * 1024;
     private static final long FRAME_BUDGET_NS = 2_000_000;
     private static final long EVICT_AFTER_NS = 10_000_000_000L;
+    private static final double ANIMATION_DISTANCE_SQUARED = 3 * 3;
     private final Map<Key, Panel> panels = new LinkedHashMap<>(16, 0.75F, true);
     private final Map<RecipePanelTile, Binding> bindings = new WeakHashMap<>();
     private final Panel unavailable = new Panel(null, null);
     private World world;
     private long frame;
+    private long clientTick;
 
     private PanelFboManager() {}
 
     public void reload() {
+        PanelDrawBatch.INSTANCE.reload();
         if (panels.values()
             .stream()
-            .anyMatch(panel -> panel.texture.bytes() > 0)) {
+            .anyMatch(panel -> panel.bytes() > 0)) {
             try (RenderState ignored = new RenderState()) {
-                for (Panel panel : panels.values()) panel.texture.dispose();
+                for (Panel panel : panels.values()) panel.dispose();
             }
         }
         panels.clear();
@@ -79,9 +84,31 @@ public final class PanelFboManager {
         return panel;
     }
 
+    boolean requestAnimation(RecipePanelTile tile, Vec3 eye, double x, double y, double z) {
+        double dx = eye.xCoord - x;
+        double dy = eye.yCoord - y;
+        double dz = eye.zCoord - z;
+        if (dx * dx + dy * dy + dz * dz > ANIMATION_DISTANCE_SQUARED) return false;
+        Binding binding = bindings.get(tile);
+        if (binding == null || binding.panel.animationFailed || binding.panel.recipe == null) return false;
+        if (binding.visibilityTick != clientTick) {
+            binding.visibilityTick = clientTick;
+            // Minecraft's ray trace mutates its start vector.
+            Vec3 rayStart = Vec3.createVectorHelper(eye.xCoord, eye.yCoord, eye.zCoord);
+            MovingObjectPosition obstruction = tile.getWorldObj()
+                .rayTraceBlocks(rayStart, Vec3.createVectorHelper(x, y, z));
+            binding.unobstructed = obstruction == null
+                || obstruction.blockX == tile.xCoord && obstruction.blockY == tile.yCoord
+                    && obstruction.blockZ == tile.zCoord;
+        }
+        if (binding.unobstructed) binding.panel.lastAnimatedFrame = frame;
+        return binding.unobstructed;
+    }
+
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
+        clientTick++;
         Minecraft mc = Minecraft.getMinecraft();
         if (world != mc.theWorld) {
             reload();
@@ -104,22 +131,36 @@ public final class PanelFboManager {
                 panel.evicted = true;
                 iterator.remove();
             }
-            if ((panel.evicted || panel.renderFailed || !framebuffersEnabled) && panel.texture.bytes() > 0) {
+            boolean disposeAll = panel.evicted || panel.renderFailed || !framebuffersEnabled;
+            if ((disposeAll && panel.bytes() > 0) || (!panel.animationRequested(frame) && panel.animationBytes() > 0)) {
                 if (dispose == null) dispose = new ArrayList<>();
                 dispose.add(panel);
             }
         }
         if (dispose != null) {
             try (RenderState ignored = new RenderState()) {
-                for (Panel panel : dispose) panel.texture.dispose();
+                for (Panel panel : dispose) {
+                    if (panel.evicted || panel.renderFailed || !framebuffersEnabled) panel.dispose();
+                    else panel.disposeAnimation();
+                }
             }
         }
         if (!framebuffersEnabled) return;
         long memory = 0;
-        for (Panel panel : panels.values()) memory += panel.texture.bytes();
+        for (Panel panel : panels.values()) memory += panel.bytes();
         for (Panel panel : panels.values()) {
-            if (panel.renderFailed || !panel.visibleInFrame(frame) || panel.ready()) continue;
-            long previousBytes = panel.texture.bytes();
+            if (panel.renderFailed || !panel.visibleInFrame(frame)) continue;
+            if (panel.ready()) {
+                if (!panel.animationRequested(frame) || panel.lastAnimationTick == clientTick) continue;
+                long additionalBytes = 2 * PanelTexture.estimatedBytes(panel.width) - panel.animationBytes();
+                if (memory + additionalBytes > MAX_TEXTURE_BYTES) continue;
+                long previousBytes = panel.bytes();
+                panel.animate(clientTick);
+                memory += panel.bytes() - previousBytes;
+                if (System.nanoTime() - start >= FRAME_BUDGET_NS) break;
+                continue;
+            }
+            long previousBytes = panel.bytes();
             panel.capacityLimited = false;
             if (memory >= MAX_TEXTURE_BYTES && previousBytes == 0) {
                 panel.capacityLimited = true;
@@ -133,7 +174,7 @@ public final class PanelFboManager {
                 continue;
             }
             panel.render();
-            memory += panel.texture.bytes() - previousBytes;
+            memory += panel.bytes() - previousBytes;
             if (System.nanoTime() - start >= FRAME_BUDGET_NS) break;
         }
     }
@@ -142,6 +183,8 @@ public final class PanelFboManager {
 
         private final long contentVersion;
         private final Panel panel;
+        private long visibilityTick = -1;
+        private boolean unobstructed;
 
         private Binding(long contentVersion, Panel panel) {
             this.contentVersion = contentVersion;
@@ -178,14 +221,19 @@ public final class PanelFboManager {
         private final NBTTagCompound snapshot;
         private final PanelSettings settings;
         private final PanelTexture texture = new PanelTexture();
+        private final PanelTexture background = new PanelTexture();
+        private final PanelTexture animated = new PanelTexture();
         private RecipeResolver.Resolution resolution;
         private ResolvedRecipe recipe;
         private PanelRecipeWidget widget;
         private boolean evicted;
         private boolean renderFailed;
         private boolean capacityLimited;
+        private boolean animationFailed;
         private long lastSeen;
         private long lastSeenFrame;
+        private long lastAnimatedFrame = -2;
+        private long lastAnimationTick = -1;
         private int originX;
         private int originY;
         private int yShift;
@@ -210,8 +258,31 @@ public final class PanelFboManager {
             return settings.transparent;
         }
 
-        void bindTexture() {
-            texture.bind();
+        void bindTexture(boolean animate) {
+            (animate && animated.ready() ? animated : texture).bind();
+        }
+
+        private long bytes() {
+            return texture.bytes() + animationBytes();
+        }
+
+        private long animationBytes() {
+            return background.bytes() + animated.bytes();
+        }
+
+        private boolean animationRequested(long frame) {
+            return !animationFailed && recipe != null && frame - lastAnimatedFrame <= 1;
+        }
+
+        private void dispose() {
+            texture.dispose();
+            disposeAnimation();
+        }
+
+        private void disposeAnimation() {
+            background.dispose();
+            animated.dispose();
+            lastAnimationTick = -1;
         }
 
         String statusKey() {
@@ -273,14 +344,40 @@ public final class PanelFboManager {
 
         private void render() {
             if (renderFailed) return;
+            Minecraft mc = Minecraft.getMinecraft();
+            mc.mcProfiler.startSection("recipePanels.capture");
             try {
-                texture.render(width, this::draw);
+                texture.render(width, () -> draw(false));
             } catch (RuntimeException | LinkageError e) {
                 fail(e);
+            } finally {
+                mc.mcProfiler.endSection();
             }
         }
 
-        private void draw() {
+        private void animate(long tick) {
+            Minecraft mc = Minecraft.getMinecraft();
+            mc.mcProfiler.startSection("recipePanels.items");
+            try {
+                if (!background.ready()) background.render(width, () -> draw(true));
+                animated.render(width, () -> {
+                    background.draw(width, height);
+                    widget.drawItems();
+                    finishImage();
+                });
+                lastAnimationTick = tick;
+            } catch (RuntimeException | LinkageError failure) {
+                animationFailed = true;
+                NEIRecipePanelsMod.LOG.warn("Could not animate recipe panel", failure);
+                try (RenderState ignored = new RenderState()) {
+                    disposeAnimation();
+                }
+            } finally {
+                mc.mcProfiler.endSection();
+            }
+        }
+
+        private void draw(boolean backgroundOnly) {
             Minecraft mc = Minecraft.getMinecraft();
             if (!settings.transparent) PanelBackdrop.draw(width, height);
             String title = settings.customName.isEmpty() ? recipe == null ? "" : recipe.name() : settings.customName;
@@ -291,11 +388,17 @@ public final class PanelFboManager {
                 (width - font.getStringWidth(title)) / 2,
                 5,
                 settings.transparent ? 0xFFFFFF : 0x404040);
-            if (widget != null) widget.draw(-10000, -10000);
-            else {
+            if (widget != null) {
+                if (backgroundOnly) widget.drawBackground();
+                else widget.draw(-10000, -10000);
+            } else {
                 String status = font.trimStringToWidth(StatCollector.translateToLocal(statusKey()), width - 16);
                 font.drawString(status, (width - font.getStringWidth(status)) / 2, height / 2, 0x404040);
             }
+            finishImage();
+        }
+
+        private void finishImage() {
             GL11.glMatrixMode(GL11.GL_MODELVIEW);
             GL11.glLoadIdentity();
             GL11.glTranslatef(0, 0, -2000);

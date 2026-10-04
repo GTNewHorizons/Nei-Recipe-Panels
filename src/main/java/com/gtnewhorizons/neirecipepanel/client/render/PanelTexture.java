@@ -49,6 +49,23 @@ final class PanelTexture {
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
     }
 
+    void draw(int width, int height) {
+        bind();
+        GL11.glEnable(GL11.GL_TEXTURE_2D);
+        GL11.glDisable(GL11.GL_LIGHTING);
+        GL11.glDisable(GL11.GL_BLEND);
+        GL11.glDisable(GL11.GL_ALPHA_TEST);
+        GL11.glDisable(GL11.GL_DEPTH_TEST);
+        GL11.glColor4f(1, 1, 1, 1);
+        Tessellator tessellator = Tessellator.instance;
+        tessellator.startDrawingQuads();
+        tessellator.addVertexWithUV(0, height, 0, 0, 0);
+        tessellator.addVertexWithUV(width, height, 0, 1, 0);
+        tessellator.addVertexWithUV(width, 0, 0, 1, 1);
+        tessellator.addVertexWithUV(0, 0, 0, 0, 1);
+        tessellator.draw();
+    }
+
     void render(int logicalSide, Runnable draw) {
         if (!OpenGlHelper.isFramebufferEnabled()) return;
         try (RenderState state = new RenderState()) {
@@ -175,4 +192,5 @@ final class PanelTexture {
         else return false;
         return true;
     }
+
 }

@@ -15,22 +15,34 @@ import org.lwjgl.opengl.GL11;
 
 import com.gtnewhorizons.neirecipepanel.block.RecipePanelTile;
 
-/** Blits the offscreen NEI render (see {@link PanelFboManager}) onto the panel face as one flat quad. */
+/** Submits visible panel faces to the shared draw batch. */
 public class RecipePanelRenderer extends TileEntitySpecialRenderer {
 
     private static final int PANEL_RGB = 0xC6C6C6;
     /** Panel quad size as a fraction of the block face. */
-    private static final float MAX_EXTENT = 0.92F;
+    static final float MAX_EXTENT = 0.92F;
     /** How far off the block centre the panel quad sits, towards its face. */
-    private static final float REACH = 0.5F - 0.01F;
+    static final float REACH = 0.5F - 0.01F;
 
     @Override
     public void renderTileEntityAt(TileEntity tile, double x, double y, double z, float partialTicks) {
         if (!(tile instanceof RecipePanelTile)) return;
         if (!((RecipePanelTile) tile).hasSnapshot()) return;
 
-        PanelFboManager.Panel panel = PanelFboManager.INSTANCE.visible((RecipePanelTile) tile);
         ForgeDirection face = ForgeDirection.getOrientation(tile.getBlockMetadata());
+        Vec3 eye = PanelDrawBatch.INSTANCE.camera(partialTicks);
+        double centreX = tile.xCoord + .5 - face.offsetX * REACH;
+        double centreY = tile.yCoord + .5 - face.offsetY * REACH;
+        double centreZ = tile.zCoord + .5 - face.offsetZ * REACH;
+        if ((eye.xCoord - centreX) * face.offsetX + (eye.yCoord - centreY) * face.offsetY
+            + (eye.zCoord - centreZ) * face.offsetZ <= 0) return;
+        RecipePanelTile recipeTile = (RecipePanelTile) tile;
+        PanelFboManager.Panel panel = PanelFboManager.INSTANCE.visible(recipeTile);
+        if (panel.ready()) {
+            boolean animated = PanelFboManager.INSTANCE.requestAnimation(recipeTile, eye, centreX, centreY, centreZ);
+            PanelDrawBatch.INSTANCE.submit(recipeTile, panel, x, y, z, face, animated);
+            return;
+        }
         float halfW = MAX_EXTENT / 2F;
         float halfH = MAX_EXTENT / 2F;
 
@@ -47,28 +59,9 @@ public class RecipePanelRenderer extends TileEntitySpecialRenderer {
             // full-bright, like the GUI it mirrors - block/sky light and torch colour shouldn't tint it
             OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, 240F, 240F);
 
-            if (panel.ready()) {
-                GL11.glEnable(GL11.GL_TEXTURE_2D);
-                if (panel.transparent()) {
-                    GL11.glEnable(GL11.GL_BLEND);
-                    GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-                } else {
-                    GL11.glDisable(GL11.GL_BLEND);
-                }
-                GL11.glColor4f(1F, 1F, 1F, 1F);
-                panel.bindTexture();
-                Tessellator t = Tessellator.instance;
-                t.startDrawingQuads();
-                t.addVertexWithUV(-halfW, -halfH, 0D, 0D, 0D);
-                t.addVertexWithUV(halfW, -halfH, 0D, 1D, 0D);
-                t.addVertexWithUV(halfW, halfH, 0D, 1D, 1D);
-                t.addVertexWithUV(-halfW, halfH, 0D, 0D, 1D);
-                t.draw();
-            } else {
-                GL11.glDisable(GL11.GL_TEXTURE_2D);
-                drawQuad(halfW, halfH, PANEL_RGB);
-                drawStatus(panel.statusKey(), halfW, halfH);
-            }
+            GL11.glDisable(GL11.GL_TEXTURE_2D);
+            drawQuad(halfW, halfH, PANEL_RGB);
+            drawStatus(panel.statusKey(), halfW, halfH);
 
         }
     }

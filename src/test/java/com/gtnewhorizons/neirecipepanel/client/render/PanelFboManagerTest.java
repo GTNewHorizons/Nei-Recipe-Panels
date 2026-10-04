@@ -3,15 +3,27 @@ package com.gtnewhorizons.neirecipepanel.client.render;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 
+import net.minecraft.block.Block;
+import net.minecraft.block.material.Material;
+import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.util.Vec3;
+import net.minecraft.world.World;
+import net.minecraft.world.WorldProvider;
+import net.minecraft.world.chunk.IChunkProvider;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.gtnewhorizons.neirecipepanel.block.RecipePanelTile;
+import com.gtnewhorizons.neirecipepanel.client.recipe.ResolvedRecipe;
+
+import sun.misc.Unsafe;
 
 class PanelFboManagerTest {
 
@@ -72,6 +84,72 @@ class PanelFboManagerTest {
         CountingTile second = tile();
 
         assertSame(manager.visible(first), manager.visible(second));
+    }
+
+    @Test
+    void animationVisibilityPreservesTheCameraForAdjacentPanels() throws ReflectiveOperationException {
+        Field singleton = Unsafe.class.getDeclaredField("theUnsafe");
+        singleton.setAccessible(true);
+        Unsafe unsafe = (Unsafe) singleton.get(null);
+        EmptyWorld world = (EmptyWorld) unsafe.allocateInstance(EmptyWorld.class);
+        CountingTile north = tile();
+        CountingTile east = tile();
+        Field recipe = PanelFboManager.Panel.class.getDeclaredField("recipe");
+        recipe.setAccessible(true);
+        recipe.set(manager.visible(north), unsafe.allocateInstance(ResolvedRecipe.class));
+        manager.visible(east);
+        north.setWorldObj(world);
+        east.setWorldObj(world);
+        Vec3 eye = Vec3.createVectorHelper(1.35, 1.75, 1.65);
+
+        assertTrue(manager.requestAnimation(north, eye, 0.5, 1.5, 1.99));
+        assertEquals(1.35, eye.xCoord);
+        assertEquals(1.75, eye.yCoord);
+        assertEquals(1.65, eye.zCoord);
+        assertTrue(manager.requestAnimation(east, eye, 1.01, 1.5, 2.5));
+        assertEquals(1.35, eye.xCoord);
+        assertEquals(1.75, eye.yCoord);
+        assertEquals(1.65, eye.zCoord);
+    }
+
+    private static final class EmptyWorld extends World {
+
+        private static final Block AIR = new Block(Material.air) {
+
+            @Override
+            public boolean canCollideCheck(int metadata, boolean hitLiquids) {
+                return false;
+            }
+        };
+
+        private EmptyWorld() {
+            super(null, "fixture", (WorldProvider) null, null, null);
+        }
+
+        @Override
+        protected IChunkProvider createChunkProvider() {
+            return null;
+        }
+
+        @Override
+        protected int func_152379_p() {
+            return 0;
+        }
+
+        @Override
+        public Entity getEntityByID(int id) {
+            return null;
+        }
+
+        @Override
+        public Block getBlock(int x, int y, int z) {
+            return AIR;
+        }
+
+        @Override
+        public int getBlockMetadata(int x, int y, int z) {
+            return 0;
+        }
     }
 
     private static CountingTile tile() {
