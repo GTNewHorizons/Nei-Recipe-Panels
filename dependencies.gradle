@@ -44,6 +44,12 @@ dependencies {
 
     runtimeOnlyNonPublishable("com.github.GTNewHorizons:Avaritia:1.99:dev")
 
+    //runtimeOnlyNonPublishable("com.github.GTNewHorizons:Angelica:2.2.22:dev")
+
+    if (project.hasProperty("profilePanels")) {
+        runtimeOnlyNonPublishable("com.gtnewhorizons.angelica:angelica-tracy:0.14.1")
+    }
+
     // Optional Waila integration, registered through IMC.
     devOnlyNonPublishable("com.github.GTNewHorizons:waila:1.19.34:dev")
 
@@ -55,4 +61,6 @@ configurations.testRuntimeClasspath {
     exclude(group: "com.github.GTNewHorizons", module: "GT5-Unofficial")
     exclude(group: "com.github.GTNewHorizons", module: "Avaritia")
     exclude(group: "GTNewHorizons", module: "spark-forge1710")
+    exclude(group: "com.github.GTNewHorizons", module: "Angelica")
+    exclude(group: "com.gtnewhorizons.angelica", module: "angelica-tracy")
 }

@@ -22,3 +22,11 @@ tasks.register<Test>("gpuTest") {
     javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(8)) })
     systemProperty("java.library.path", file("run/natives/lwjgl2").absolutePath)
 }
+
+if (providers.gradleProperty("profilePanels").isPresent) {
+    tasks.withType<JavaExec>().configureEach {
+        if (name.startsWith("runClient")) {
+            jvmArgs("-Dangelica.tracy=true", "-Dangelica.tracy.fineZones=true")
+        }
+    }
+}
