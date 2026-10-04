@@ -380,7 +380,8 @@ public final class PanelFboManager {
         private void draw(boolean backgroundOnly) {
             Minecraft mc = Minecraft.getMinecraft();
             if (!settings.transparent) PanelBackdrop.draw(width, height);
-            String title = settings.customName.isEmpty() ? recipe == null ? "" : recipe.name() : settings.customName;
+            String title = settings.customName.isEmpty() ? recipe == null ? "" : recipe.handler.getRecipeTabName()
+                : settings.customName;
             FontRenderer font = mc.fontRenderer;
             title = font.trimStringToWidth(title, width - 16);
             font.drawString(
