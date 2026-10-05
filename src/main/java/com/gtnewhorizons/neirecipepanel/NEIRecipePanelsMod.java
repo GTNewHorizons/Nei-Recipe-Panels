@@ -20,7 +20,7 @@ import cpw.mods.fml.common.network.simpleimpl.SimpleNetworkWrapper;
     version = Tags.VERSION,
     name = NEIRecipePanelsMod.NAME,
     acceptedMinecraftVersions = "[1.7.10]",
-    dependencies = "required-after:NotEnoughItems@[2.8.152,)")
+    dependencies = "required-after:NotEnoughItems@[2.8.152,);after:angelica@(2.2.28,)")
 public class NEIRecipePanelsMod {
 
     public static final String MODID = "nei-recipe-panels";
