@@ -183,7 +183,8 @@ final class PanelRecipeWidget extends RecipeWidget {
 
         private void configure(Minecraft mc) {
             guiLeft = x;
-            guiTop = y + getHandlerInfo().getYShift();
+            guiTop = y + PanelRecipeWidget.this.getHandlerInfo()
+                .getYShift();
             setWorldAndResolution(mc, 2 * guiLeft + 176, 2 * guiTop + 166);
         }
 

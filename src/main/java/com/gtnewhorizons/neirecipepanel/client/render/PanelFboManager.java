@@ -26,7 +26,6 @@ import com.gtnewhorizons.neirecipepanel.config.Config;
 import com.gtnewhorizons.neirecipepanel.config.PanelSettings;
 
 import codechicken.nei.PositionedStack;
-import codechicken.nei.recipe.GuiRecipeTab;
 import codechicken.nei.recipe.HandlerInfo;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
@@ -232,6 +231,11 @@ public final class PanelFboManager {
 
     public static final class Panel {
 
+        private static final int MAX_SIDE = 512;
+        private static final int TITLE_HEIGHT = 14;
+        private static final int MEASURE_SIDE = 512;
+        private static final int MEASURE_PADDING = 64;
+
         private final NBTTagCompound snapshot;
         private final PanelSettings settings;
         private final PanelTexture texture = new PanelTexture();
@@ -251,6 +255,8 @@ public final class PanelFboManager {
         private int originX;
         private int originY;
         private int yShift;
+        private boolean measured;
+        private int[] drawn;
         int width = 176;
         int height = 176;
 
@@ -331,34 +337,67 @@ public final class PanelFboManager {
                 }
                 if (recipe == null) return true;
                 recipe.refresh();
-                recipe.name();
-                HandlerInfo info = GuiRecipeTab.getHandlerInfo(recipe.handler);
-                yShift = info.getYShift();
-                int minX = 0;
-                int minY = Math.min(0, yShift);
-                int maxX = Math.max(166, info.getWidth());
-                int recipeHeight = recipe.handler.getRecipeHeight(recipe.index);
-                int maxY = (recipeHeight > 0 ? recipeHeight : info.getHeight()) + Math.max(0, yShift);
-                for (PositionedStack stack : recipe.allStacks()) {
-                    minX = Math.min(minX, stack.relx);
-                    minY = Math.min(minY, stack.rely + yShift);
-                    maxX = Math.max(maxX, stack.relx + stack.width);
-                    maxY = Math.max(maxY, stack.rely + yShift + stack.height);
-                }
-                int bodyWidth = maxX - minX;
-                int bodyHeight = maxY - minY;
-                int side = Math.max(176, Math.max(bodyWidth + 24, bodyHeight + 38));
-                if (side > 512 || bodyWidth <= 0 || bodyHeight <= 0)
-                    throw new IllegalArgumentException("Recipe exceeds panel layout limits");
-                width = height = side;
-                originX = (side - bodyWidth) / 2 - minX;
-                originY = 14 + (side - 14 - bodyHeight) / 2 - minY;
-                widget.setLocation(originX, originY);
+                layout();
                 return true;
             } catch (RuntimeException | LinkageError e) {
                 fail(e);
                 return false;
             }
+        }
+
+        private void layout() {
+            HandlerInfo info = widget.getHandlerInfo();
+            yShift = info.getYShift();
+            int minX = 0;
+            int minY = Math.min(0, yShift);
+            int maxX = Math.max(166, info.getWidth());
+            int recipeHeight = recipe.handler.getRecipeHeight(recipe.index);
+            int maxY = (recipeHeight > 0 ? recipeHeight : info.getHeight()) + Math.max(0, yShift);
+            for (PositionedStack stack : recipe.allStacks()) {
+                minX = Math.min(minX, stack.relx);
+                minY = Math.min(minY, stack.rely + yShift);
+                maxX = Math.max(maxX, stack.relx + stack.width);
+                maxY = Math.max(maxY, stack.rely + yShift + stack.height);
+            }
+            if (!measured) {
+                measured = true;
+                drawn = measureDrawnArea();
+            }
+            // Handlers (e.g. GregTech descriptions) may draw past their declared height.
+            if (drawn != null) {
+                int unionMinX = Math.min(minX, drawn[0]);
+                int unionMinY = Math.min(minY, drawn[1]);
+                int unionMaxX = Math.max(maxX, drawn[2]);
+                int unionMaxY = Math.max(maxY, drawn[3]);
+                if (side(unionMaxX - unionMinX, unionMaxY - unionMinY) <= MAX_SIDE) {
+                    minX = unionMinX;
+                    minY = unionMinY;
+                    maxX = unionMaxX;
+                    maxY = unionMaxY;
+                }
+            }
+            int bodyWidth = maxX - minX;
+            int bodyHeight = maxY - minY;
+            int side = side(bodyWidth, bodyHeight);
+            if (side > MAX_SIDE || bodyWidth <= 0 || bodyHeight <= 0)
+                throw new IllegalArgumentException("Recipe exceeds panel layout limits");
+            width = height = side;
+            originX = (side - bodyWidth) / 2 - minX;
+            originY = TITLE_HEIGHT + (side - TITLE_HEIGHT - bodyHeight) / 2 - minY;
+            widget.setLocation(originX, originY);
+        }
+
+        private static int side(int bodyWidth, int bodyHeight) {
+            return Math.max(176, Math.max(bodyWidth + 24, bodyHeight + TITLE_HEIGHT + 24));
+        }
+
+        /** Body-relative bounds of what the handler actually draws, or null if unavailable. */
+        private int[] measureDrawnArea() {
+            widget.setLocation(MEASURE_PADDING, MEASURE_PADDING);
+            int[] area = PanelTexture.measure(MEASURE_SIDE, widget::drawBackground);
+            if (area == null) return null;
+            for (int i = 0; i < area.length; i++) area[i] -= MEASURE_PADDING;
+            return area;
         }
 
         private void render() {

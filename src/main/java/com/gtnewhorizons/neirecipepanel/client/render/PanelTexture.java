@@ -2,6 +2,7 @@ package com.gtnewhorizons.neirecipepanel.client.render;
 
 import java.nio.ByteBuffer;
 
+import net.minecraft.client.renderer.GLAllocation;
 import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.texture.TextureUtil;
@@ -93,6 +94,34 @@ final class PanelTexture {
                 GL11.GL_TEXTURE_MIN_FILTER,
                 mipmaps ? GL11.GL_LINEAR_MIPMAP_LINEAR : GL11.GL_LINEAR);
             complete = true;
+        }
+    }
+
+    /**
+     * Draws at 1:1 scale on a transparent target and returns the covered area as {minX, minY, maxX, maxY}
+     * (exclusive maxima, top-left origin), or null when nothing was drawn.
+     */
+    static int[] measure(int logicalSide, Runnable draw) {
+        if (!OpenGlHelper.isFramebufferEnabled()) return null;
+        try (RenderState state = new RenderState()) {
+            state.prepareGui();
+            drawInto(logicalSide, logicalSide, draw);
+            PanelScratch.bind();
+            ByteBuffer alpha = GLAllocation.createDirectByteBuffer(logicalSide * logicalSide);
+            GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 1);
+            GL11.glReadPixels(0, 0, logicalSide, logicalSide, GL11.GL_ALPHA, GL11.GL_UNSIGNED_BYTE, alpha);
+            int minX = Integer.MAX_VALUE, minY = Integer.MAX_VALUE, maxX = -1, maxY = -1;
+            for (int row = 0; row < logicalSide; row++) {
+                int y = logicalSide - 1 - row;
+                for (int x = 0; x < logicalSide; x++) {
+                    if (alpha.get(row * logicalSide + x) == 0) continue;
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
+            return maxX < 0 ? null : new int[] { minX, minY, maxX + 1, maxY + 1 };
         }
     }
 
