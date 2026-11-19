@@ -13,6 +13,7 @@ import com.gtnewhorizons.neirecipepanel.recipe.RecipeSnapshot;
 import codechicken.nei.PositionedStack;
 import codechicken.nei.recipe.FurnaceRecipeHandler;
 import codechicken.nei.recipe.IRecipeHandler;
+import codechicken.nei.recipe.RecipeHandlerRef;
 
 public final class ResolvedRecipe {
 
@@ -29,6 +30,13 @@ public final class ResolvedRecipe {
         this.index = index;
         this.snapshot = snapshot;
         refresh();
+    }
+
+    /** The recipe exactly as NEI currently shows it, without a saved-document lookup; null if it can't be captured. */
+    public static ResolvedRecipe live(IRecipeHandler handler, int index) {
+        RecipeHandlerRef source = PinnedRecipeHandler.unwrap(handler, index);
+        RecipeSnapshot snapshot = RecipeCapture.capture(source.handler, source.recipeIndex);
+        return snapshot == null ? null : new ResolvedRecipe(source.handler, source.recipeIndex, snapshot);
     }
 
     public IRecipeHandler pinnedHandler() {
