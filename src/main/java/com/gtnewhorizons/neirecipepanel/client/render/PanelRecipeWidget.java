@@ -85,7 +85,7 @@ final class PanelRecipeWidget extends RecipeWidget {
         screen.configure(mc);
         int depth = contextDepth();
         mc.currentScreen = screen;
-        try {
+        try (ProgressFreeze ignored = new ProgressFreeze(recipe.handler)) {
             GL11.glColor4f(1, 1, 1, 1);
             super.draw(mouseX, mouseY);
         } finally {
