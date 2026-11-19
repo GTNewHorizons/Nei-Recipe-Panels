@@ -61,6 +61,7 @@ public class MakeRecipePanelMessage implements IMessage {
 
             Config.PanelMode mode = Config.panelMode;
             if (mode == Config.PanelMode.DISABLED) {
+                deny(player);
                 return;
             }
             boolean creative = player.capabilities.isCreativeMode;

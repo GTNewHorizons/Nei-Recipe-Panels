@@ -127,8 +127,18 @@ public class RecipePanelBlock extends BlockContainer {
     }
 
     @Override
+    public void onBlockHarvested(World world, int x, int y, int z, int meta, EntityPlayer player) {
+        TileEntity te = world.getTileEntity(x, y, z);
+        if (te instanceof RecipePanelTile && player.capabilities.isCreativeMode) {
+            ((RecipePanelTile) te).suppressDrop();
+        }
+        super.onBlockHarvested(world, x, y, z, meta, player);
+    }
+
+    @Override
     public void breakBlock(World world, int x, int y, int z, Block block, int meta) {
-        if (!world.isRemote) {
+        TileEntity tile = world.getTileEntity(x, y, z);
+        if (!world.isRemote && !(tile instanceof RecipePanelTile && ((RecipePanelTile) tile).isDropSuppressed())) {
             ItemStack panel = panelFor(world, x, y, z);
             if (panel != null) {
                 EntityItem entity = new EntityItem(world, x + 0.5D, y + 0.5D, z + 0.5D, panel);

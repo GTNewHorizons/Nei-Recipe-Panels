@@ -242,7 +242,7 @@ class ConfigurePanelMessageTest {
         }
 
         @Override
-        public int getActualHeight() {
+        public int getHeight() {
             return 256;
         }
 
