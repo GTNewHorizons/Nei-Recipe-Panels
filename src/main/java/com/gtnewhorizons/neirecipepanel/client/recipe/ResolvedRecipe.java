@@ -45,6 +45,8 @@ public final class ResolvedRecipe {
 
     public void refresh() {
         choicesAdjusted = false;
+        // Diagrams draw their own components; there are no NEI stacks to reconcile.
+        if (snapshot.isDiagram()) return;
         inputs = reconcile(handler.getIngredientStacks(index), snapshot.ingredients());
         List<PositionedStack> otherStacks = handler.getOtherStacks(index);
         if (handler instanceof FurnaceRecipeHandler && FurnaceRecipeHandler.afuels != null
@@ -105,6 +107,13 @@ public final class ResolvedRecipe {
     }
 
     public ItemStack displayResult() {
+        if (snapshot.isDiagram()) {
+            List<RecipeSnapshot.Selection> anchors = snapshot.diagramAnchors();
+            return anchors.isEmpty() ? null
+                : StackIdentity.queryStack(
+                    anchors.get(0)
+                        .identity());
+        }
         for (PositionedStack output : outputs()) if (output.item != null) return output.item.copy();
         return null;
     }

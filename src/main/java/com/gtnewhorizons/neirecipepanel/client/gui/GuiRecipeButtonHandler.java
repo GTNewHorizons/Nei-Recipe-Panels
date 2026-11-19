@@ -5,6 +5,7 @@ import java.util.List;
 import com.gtnewhorizons.neirecipepanel.client.render.RecipeFootprint;
 
 import codechicken.nei.recipe.GuiRecipeButton;
+import codechicken.nei.recipe.RecipeHandlerRef;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 
 /**
@@ -18,13 +19,17 @@ public class GuiRecipeButtonHandler {
 
     @SubscribeEvent
     public void onUpdateRecipeButtons(GuiRecipeButton.UpdateRecipeButtonsEvent.Post event) {
-        List<GuiRecipeButton> buttons = event.buttonList;
-        int columnX = buttons.isEmpty() ? Math.min(166, event.width) - SIZE : buttons.get(buttons.size() - 1).xPosition;
-        int bottomY = event.height - 18;
+        int[] spot = place(event.handlerRef, event.width, event.height, event.buttonList);
+        event.buttonList.add(new GuiRecipePanelButton(event.handlerRef, spot[0], spot[1]));
+    }
+
+    /** Widget-relative {x, y} for the button, given the buttons NEI already placed. */
+    static int[] place(RecipeHandlerRef ref, int width, int height, List<GuiRecipeButton> buttons) {
+        int columnX = buttons.isEmpty() ? Math.min(166, width) - SIZE : buttons.get(buttons.size() - 1).xPosition;
+        int bottomY = height - 18;
         int x = columnX;
         int y = bottomY - STEP * buttons.size();
-        RecipeFootprint footprint = RecipeFootprint
-            .of(event.handlerRef.handler, event.handlerRef.recipeIndex, event.width, event.height);
+        RecipeFootprint footprint = RecipeFootprint.of(ref.handler, ref.recipeIndex, width, height);
         if (footprint != null && !isFree(footprint, buttons, x, y)) {
             int defaultX = x;
             int defaultY = y;
@@ -44,7 +49,7 @@ public class GuiRecipeButtonHandler {
                 }
             }
         }
-        buttons.add(new GuiRecipePanelButton(event.handlerRef, x, y));
+        return new int[] { x, y };
     }
 
     private static boolean isFree(RecipeFootprint footprint, List<GuiRecipeButton> buttons, int x, int y) {

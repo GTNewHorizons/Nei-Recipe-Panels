@@ -25,7 +25,7 @@ public final class PanelRecipeOpener {
             return;
         }
         ItemStack result = resolution.displayResult();
-        if (usage) GuiUsageRecipe.openRecipeGui("item", result);
+        if (usage && result != null) GuiUsageRecipe.openRecipeGui("item", result);
         else mc.displayGuiScreen(new PanelRecipeGui(mc.currentScreen, resolution.recipe()));
     }
 }

@@ -44,6 +44,9 @@ dependencies {
 
     runtimeOnlyNonPublishable("com.github.GTNewHorizons:Avaritia:1.99:dev")
 
+    // Optional NEI Custom Diagram support (e.g. GregTech ore processing); classes only touched when it is loaded.
+    compileOnly("com.github.GTNewHorizons:nei-custom-diagram:1.8.36:dev") { transitive = false }
+
     // Optional Waila integration, registered through IMC.
     devOnlyNonPublishable("com.github.GTNewHorizons:waila:1.19.34:dev")
 }

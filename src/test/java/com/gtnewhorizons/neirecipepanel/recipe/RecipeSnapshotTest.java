@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Collections;
 
@@ -16,6 +17,33 @@ import org.junit.jupiter.api.Test;
 class RecipeSnapshotTest {
 
     private static final String RECIPE_ID = "{\"handlerName\":\"test.Handler\",\"ingredients\":[{\"strId\":\"minecraft:iron_ingot\"}],\"result\":{\"strId\":\"minecraft:iron_block\"}}";
+
+    @Test
+    void diagramDocumentsRoundTripAndSurviveServerSanitizing() {
+        RecipeSnapshot diagram = RecipeSnapshot.createDiagram(
+            "gregtech.oreprocessing",
+            Collections.singletonList(new RecipeSnapshot.Selection(12, 30, identity("minecraft:iron_ore"))),
+            123456789);
+
+        assertNotNull(diagram);
+        assertTrue(diagram.isDiagram());
+        assertEquals(123456789, diagram.diagramHash());
+        assertTrue(
+            diagram.ingredients()
+                .isEmpty());
+        NBTTagCompound sanitized = RecipeSnapshot.sanitize(diagram.writeToNBT(), 1, 16384);
+        assertEquals(diagram, RecipeSnapshot.readFromNBT(sanitized));
+    }
+
+    @Test
+    void diagramDocumentsNeedBetweenOneAndSixteenAnchors() {
+        assertNull(RecipeSnapshot.createDiagram("gregtech.oreprocessing", Collections.emptyList(), 1));
+        java.util.List<RecipeSnapshot.Selection> anchors = new java.util.ArrayList<>();
+        for (int i = 0; i <= RecipeSnapshot.MAX_DIAGRAM_ANCHORS; i++) {
+            anchors.add(new RecipeSnapshot.Selection(i, 0, identity("minecraft:stone")));
+        }
+        assertNull(RecipeSnapshot.createDiagram("gregtech.oreprocessing", anchors, 1));
+    }
 
     @Test
     void roundTripsCurrentDocumentWithoutSharingMutableTags() {

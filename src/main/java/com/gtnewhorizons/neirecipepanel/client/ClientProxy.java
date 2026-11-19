@@ -17,6 +17,7 @@ import net.minecraftforge.common.MinecraftForge;
 import com.gtnewhorizons.neirecipepanel.CommonProxy;
 import com.gtnewhorizons.neirecipepanel.ModItems;
 import com.gtnewhorizons.neirecipepanel.block.RecipePanelTile;
+import com.gtnewhorizons.neirecipepanel.client.gui.DiagramPanelButtons;
 import com.gtnewhorizons.neirecipepanel.client.gui.GuiRecipeButtonHandler;
 import com.gtnewhorizons.neirecipepanel.client.gui.GuiRecipePanelConfig;
 import com.gtnewhorizons.neirecipepanel.client.gui.PanelInputHandler;
@@ -58,6 +59,10 @@ public class ClientProxy extends CommonProxy {
             .register(PanelCamera.INSTANCE);
         MinecraftForgeClient.registerItemRenderer(ModItems.recipePanel, new RecipePanelItemRenderer());
         GuiContainerManager.addInputHandler(new PanelInputHandler());
+        DiagramPanelButtons diagramButtons = new DiagramPanelButtons();
+        GuiContainerManager.addDrawHandler(diagramButtons);
+        GuiContainerManager.addInputHandler(diagramButtons);
+        GuiContainerManager.addTooltipHandler(diagramButtons);
         ((IReloadableResourceManager) Minecraft.getMinecraft()
             .getResourceManager()).registerReloadListener(new IResourceManagerReloadListener() {
 

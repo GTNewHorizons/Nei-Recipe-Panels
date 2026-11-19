@@ -89,6 +89,7 @@ public final class RecipeResolver {
         RecipeSnapshot snapshot = RecipeSnapshot.readFromNBT(document);
         if (snapshot == null) return Resolution.failed(Status.INVALID);
         if (!handlersLoaded.getAsBoolean()) return Resolution.failed(Status.LOADING);
+        if (snapshot.isDiagram()) return resolveDiagram(snapshot);
         try {
             Recipe.RecipeId id = Recipe.RecipeId.of(
                 new JsonParser().parse(snapshot.recipeIdJson())
@@ -111,6 +112,19 @@ public final class RecipeResolver {
             return new Resolution(new ResolvedRecipe(ref.handler, ref.recipeIndex, snapshot), Status.READY);
         } catch (RuntimeException | LinkageError e) {
             NEIRecipePanelsMod.LOG.warn("Could not resolve recipe panel", e);
+            return Resolution.failed(Status.UNSUPPORTED);
+        }
+    }
+
+    private static Resolution resolveDiagram(RecipeSnapshot snapshot) {
+        try {
+            DiagramHandlers.Match match = DiagramHandlers.resolve(snapshot);
+            if (match == null) return Resolution.failed(Status.MISSING);
+            return new Resolution(
+                new ResolvedRecipe(match.ref.handler, match.ref.recipeIndex, snapshot),
+                match.exact ? Status.READY : Status.CHOICES_ADJUSTED);
+        } catch (RuntimeException | LinkageError e) {
+            NEIRecipePanelsMod.LOG.warn("Could not resolve recipe panel diagram", e);
             return Resolution.failed(Status.UNSUPPORTED);
         }
     }
