@@ -81,19 +81,25 @@ public final class PanelDrawBatch {
             GL11.glEnable(GL11.GL_TEXTURE_2D);
             OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, 240, 240);
             GL11.glColor4f(1, 1, 1, 1);
-            for (PanelFboManager.Panel panel : visible) {
-                Images group = images.get(panel);
-                if (!panel.ready()) continue;
-                if (panel.transparent()) {
-                    GL11.glEnable(GL11.GL_BLEND);
-                    GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-                } else GL11.glDisable(GL11.GL_BLEND);
-                draw(panel, group.still, false);
-                draw(panel, group.animated, true);
-            }
+            // Opaque first; translucent panels last without depth writes so they don't hide each other.
+            GL11.glDisable(GL11.GL_BLEND);
+            drawAll(false);
+            GL11.glEnable(GL11.GL_BLEND);
+            GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+            GL11.glDepthMask(false);
+            drawAll(true);
         } finally {
             clearPass();
             mc.mcProfiler.endSection();
+        }
+    }
+
+    private void drawAll(boolean transparent) {
+        for (PanelFboManager.Panel panel : visible) {
+            if (panel.transparent() != transparent || !panel.ready()) continue;
+            Images group = images.get(panel);
+            draw(panel, group.still, false);
+            draw(panel, group.animated, true);
         }
     }
 
