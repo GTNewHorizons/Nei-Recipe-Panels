@@ -53,6 +53,6 @@ public class GuiRecipeButtonHandler {
                 && y < button.yPosition + button.height + 1
                 && button.yPosition < y + SIZE + 1) return false;
         }
-        return footprint.isFree(x - 1, y - 1, SIZE + 2, SIZE + 2);
+        return footprint.isFree(x, y, SIZE, SIZE, 1);
     }
 }

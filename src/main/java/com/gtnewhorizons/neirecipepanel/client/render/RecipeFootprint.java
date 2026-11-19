@@ -20,7 +20,7 @@ public final class RecipeFootprint {
     private final boolean[] drawn;
     private final List<int[]> slots;
 
-    private RecipeFootprint(int width, int height, int side, boolean[] drawn, List<int[]> slots) {
+    RecipeFootprint(int width, int height, int side, boolean[] drawn, List<int[]> slots) {
         this.width = width;
         this.height = height;
         this.side = side;
@@ -52,14 +52,22 @@ public final class RecipeFootprint {
         }
     }
 
-    /** True when the rectangle lies inside the widget and touches no drawn pixel or item slot. */
-    public boolean isFree(int x, int y, int w, int h) {
+    /**
+     * True when the rectangle lies inside the widget and neither it nor a {@code margin} around it touches a drawn
+     * pixel or item slot. The margin is clipped to the widget: NEI's button column sits flush with its right edge.
+     */
+    public boolean isFree(int x, int y, int w, int h, int margin) {
         if (x < 0 || y < 0 || x + w > width || y + h > height) return false;
+        int left = Math.max(0, x - margin);
+        int top = Math.max(0, y - margin);
+        int right = Math.min(width, x + w + margin);
+        int bottom = Math.min(height, y + h + margin);
         for (int[] slot : slots) {
-            if (x < slot[0] + slot[2] && slot[0] < x + w && y < slot[1] + slot[3] && slot[1] < y + h) return false;
+            if (left < slot[0] + slot[2] && slot[0] < right && top < slot[1] + slot[3] && slot[1] < bottom)
+                return false;
         }
-        for (int row = y; row < y + h; row++) {
-            for (int column = x; column < x + w; column++) {
+        for (int row = top; row < bottom; row++) {
+            for (int column = left; column < right; column++) {
                 if (drawn[row * side + column]) return false;
             }
         }
