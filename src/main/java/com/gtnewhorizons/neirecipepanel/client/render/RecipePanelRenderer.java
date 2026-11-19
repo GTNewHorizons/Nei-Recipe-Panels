@@ -74,12 +74,13 @@ public class RecipePanelRenderer extends TileEntitySpecialRenderer {
             PanelBackdrop.draw(PLACEHOLDER_SIDE, PLACEHOLDER_SIDE);
             GL11.glTranslatef(0, 0, 0.001F);
             GL11.glColor4f(1, 1, 1, 1);
-            PanelStatusText.draw(
-                Minecraft.getMinecraft().fontRenderer,
-                panel.statusKey(),
-                PLACEHOLDER_SIDE,
-                PLACEHOLDER_SIDE,
-                PanelBackdrop.textColor());
+            DarkModeText.recolored(
+                () -> PanelStatusText.draw(
+                    Minecraft.getMinecraft().fontRenderer,
+                    panel.statusKey(),
+                    PLACEHOLDER_SIDE,
+                    PLACEHOLDER_SIDE,
+                    PanelBackdrop.textColor()));
         }
     }
 

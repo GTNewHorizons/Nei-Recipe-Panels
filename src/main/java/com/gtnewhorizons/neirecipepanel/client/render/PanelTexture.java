@@ -156,7 +156,7 @@ final class PanelTexture {
         GL11.glColor4f(1, 1, 1, 1);
         OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, 240, 240);
         try {
-            draw.run();
+            DarkModeText.recolored(draw);
         } catch (RuntimeException | LinkageError e) {
             try {
                 Tessellator.instance.draw();
