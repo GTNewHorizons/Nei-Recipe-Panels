@@ -438,20 +438,19 @@ public final class PanelFboManager {
         private void draw(boolean backgroundOnly) {
             Minecraft mc = Minecraft.getMinecraft();
             if (!settings.transparent) PanelBackdrop.draw(width, height);
-            String title = settings.customName.isEmpty() ? recipe == null ? "" : recipe.handler.getRecipeTabName()
+            String title = settings.customName.isEmpty() ? recipe == null ? ""
+                : recipe.name()
+                    .trim()
                 : settings.customName;
+            int color = settings.transparent ? 0xFFFFFF : PanelBackdrop.textColor();
             FontRenderer font = mc.fontRenderer;
             title = font.trimStringToWidth(title, width - 16);
-            font.drawString(
-                title,
-                (width - font.getStringWidth(title)) / 2,
-                5,
-                settings.transparent ? 0xFFFFFF : 0x404040);
+            font.drawString(title, (width - font.getStringWidth(title)) / 2, 5, color);
             if (widget != null) {
                 if (backgroundOnly) widget.drawBackground();
                 else widget.draw(-10000, -10000);
             } else {
-                PanelStatusText.draw(font, statusKey(), width, height, settings.transparent ? 0xFFFFFF : 0x404040);
+                PanelStatusText.draw(font, statusKey(), width, height, color);
             }
             finishImage();
         }

@@ -1,9 +1,7 @@
 package com.gtnewhorizons.neirecipepanel.client.render;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.renderer.OpenGlHelper;
-import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.tileentity.TileEntitySpecialRenderer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
@@ -17,7 +15,7 @@ import com.gtnewhorizons.neirecipepanel.block.RecipePanelTile;
 /** Submits visible panel faces to the shared draw batch. */
 public class RecipePanelRenderer extends TileEntitySpecialRenderer {
 
-    private static final int PANEL_RGB = 0xC6C6C6;
+    private static final int PLACEHOLDER_SIDE = 176;
     /** Panel quad size as a fraction of the block face. */
     static final float MAX_EXTENT = 0.92F;
     /** How far off the block centre the panel quad sits, towards its face. */
@@ -58,31 +56,21 @@ public class RecipePanelRenderer extends TileEntitySpecialRenderer {
             // full-bright, like the GUI it mirrors - block/sky light and torch colour shouldn't tint it
             OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, 240F, 240F);
 
-            GL11.glDisable(GL11.GL_TEXTURE_2D);
-            drawQuad(halfW, halfH, PANEL_RGB);
-            drawStatus(panel.statusKey(), halfW, halfH);
-
+            GL11.glDisable(GL11.GL_CULL_FACE);
+            GL11.glEnable(GL11.GL_ALPHA_TEST);
+            GL11.glAlphaFunc(GL11.GL_GREATER, 0.1F);
+            GL11.glTranslatef(-halfW, halfH, 0);
+            GL11.glScalef(MAX_EXTENT / PLACEHOLDER_SIDE, -MAX_EXTENT / PLACEHOLDER_SIDE, 1);
+            PanelBackdrop.draw(PLACEHOLDER_SIDE, PLACEHOLDER_SIDE);
+            GL11.glTranslatef(0, 0, 0.001F);
+            GL11.glColor4f(1, 1, 1, 1);
+            PanelStatusText.draw(
+                Minecraft.getMinecraft().fontRenderer,
+                panel.statusKey(),
+                PLACEHOLDER_SIDE,
+                PLACEHOLDER_SIDE,
+                PanelBackdrop.textColor());
         }
-    }
-
-    private static void drawStatus(String key, float halfWidth, float halfHeight) {
-        FontRenderer font = Minecraft.getMinecraft().fontRenderer;
-        GL11.glTranslatef(-halfWidth, halfHeight, 0.001F);
-        GL11.glScalef(MAX_EXTENT / 176, -MAX_EXTENT / 176, 1);
-        GL11.glEnable(GL11.GL_TEXTURE_2D);
-        GL11.glColor4f(1, 1, 1, 1);
-        PanelStatusText.draw(font, key, 176, 176, 0x404040);
-    }
-
-    private static void drawQuad(float halfW, float halfH, int rgb) {
-        Tessellator t = Tessellator.instance;
-        t.startDrawingQuads();
-        t.setColorOpaque_I(rgb);
-        t.addVertex(-halfW, -halfH, 0D);
-        t.addVertex(halfW, -halfH, 0D);
-        t.addVertex(halfW, halfH, 0D);
-        t.addVertex(-halfW, halfH, 0D);
-        t.draw();
     }
 
     private static void orientOutward(ForgeDirection face) {
