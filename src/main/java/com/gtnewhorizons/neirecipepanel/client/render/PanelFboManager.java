@@ -337,6 +337,9 @@ public final class PanelFboManager {
                 }
                 if (recipe == null) return true;
                 recipe.refresh();
+                // GregTech loads its resource-pack (.mcmeta) NEI text colour lazily in getRecipeName(); call it
+                // before anything draws, as NEI's screen does.
+                recipe.name();
                 layout();
                 return true;
             } catch (RuntimeException | LinkageError e) {
