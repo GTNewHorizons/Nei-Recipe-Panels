@@ -439,7 +439,8 @@ public final class PanelFboManager {
             Minecraft mc = Minecraft.getMinecraft();
             if (!settings.transparent) PanelBackdrop.draw(width, height);
             String title = settings.customName.isEmpty() ? recipe == null ? ""
-                : recipe.name()
+                // Tab name, not getRecipeName(): GregTech appends a voltage tier to that once it has drawn.
+                : recipe.handler.getRecipeTabName()
                     .trim()
                 : settings.customName;
             int color = settings.transparent ? 0xFFFFFF : PanelBackdrop.textColor();
