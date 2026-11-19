@@ -7,7 +7,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.ChatComponentTranslation;
 
 import com.gtnewhorizons.neirecipepanel.ModItems;
-import com.gtnewhorizons.neirecipepanel.config.Config;
+import com.gtnewhorizons.neirecipepanel.config.PanelConfig;
 import com.gtnewhorizons.neirecipepanel.item.ItemRecipePanel;
 import com.gtnewhorizons.neirecipepanel.recipe.RecipeSnapshot;
 
@@ -28,8 +28,8 @@ public class MakeRecipePanelMessage implements IMessage {
 
     @Override
     public void fromBytes(ByteBuf buf) {
-        NBTTagCompound raw = BoundedNbt.read(buf, Math.min(Config.maxSnapshotBytes, BoundedNbt.MAX_BYTES));
-        snapshot = RecipeSnapshot.sanitize(raw, Config.maxIngredients, Config.maxSnapshotBytes);
+        NBTTagCompound raw = BoundedNbt.read(buf, Math.min(PanelConfig.Server.maxSnapshotBytes, BoundedNbt.MAX_BYTES));
+        snapshot = RecipeSnapshot.sanitize(raw, PanelConfig.Server.maxIngredients, PanelConfig.Server.maxSnapshotBytes);
     }
 
     @Override
@@ -59,22 +59,22 @@ public class MakeRecipePanelMessage implements IMessage {
                 return;
             }
 
-            Config.PanelMode mode = Config.panelMode;
-            if (mode == Config.PanelMode.DISABLED) {
+            PanelConfig.PanelMode mode = PanelConfig.Server.panelMode;
+            if (mode == PanelConfig.PanelMode.DISABLED) {
                 deny(player);
                 return;
             }
             boolean creative = player.capabilities.isCreativeMode;
-            if (mode == Config.PanelMode.CREATIVE_ONLY && !creative) {
+            if (mode == PanelConfig.PanelMode.CREATIVE_ONLY && !creative) {
                 deny(player);
                 return;
             }
-            if (mode == Config.PanelMode.OP_ONLY && !isOp(player)) {
+            if (mode == PanelConfig.PanelMode.OP_ONLY && !isOp(player)) {
                 deny(player);
                 return;
             }
 
-            boolean spend = !creative || Config.consumeInCreative;
+            boolean spend = !creative || PanelConfig.Server.consumeInCreative;
             if (spend && !consumeBlueprint(player)) {
                 player.addChatMessage(new ChatComponentTranslation("nei-recipe-panels.chat.needBlueprint"));
                 return;

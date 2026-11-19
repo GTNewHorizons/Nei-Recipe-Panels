@@ -22,7 +22,7 @@ import com.gtnewhorizons.neirecipepanel.NEIRecipePanelsMod;
 import com.gtnewhorizons.neirecipepanel.block.RecipePanelTile;
 import com.gtnewhorizons.neirecipepanel.client.recipe.RecipeResolver;
 import com.gtnewhorizons.neirecipepanel.client.recipe.ResolvedRecipe;
-import com.gtnewhorizons.neirecipepanel.config.Config;
+import com.gtnewhorizons.neirecipepanel.config.PanelConfig;
 import com.gtnewhorizons.neirecipepanel.config.PanelSettings;
 
 import codechicken.nei.PositionedStack;
@@ -43,6 +43,7 @@ public final class PanelFboManager {
     private World world;
     private long frame;
     private long clientTick;
+    private int supersample = PanelTexture.supersample();
 
     private PanelFboManager() {}
 
@@ -127,7 +128,13 @@ public final class PanelFboManager {
 
     @SubscribeEvent
     public void onRenderTick(TickEvent.RenderTickEvent event) {
-        if (event.phase != TickEvent.Phase.START || panels.isEmpty()) return;
+        if (event.phase != TickEvent.Phase.START) return;
+        // Changed from the in-game config screen: cached images are at the old resolution.
+        if (supersample != PanelTexture.supersample()) {
+            supersample = PanelTexture.supersample();
+            reload();
+        }
+        if (panels.isEmpty()) return;
         frame++;
         long start = System.nanoTime();
         List<Panel> dispose = null;
@@ -159,7 +166,7 @@ public final class PanelFboManager {
             }
         }
         if (!framebuffersEnabled) return;
-        long budget = Config.textureBudgetMB * 1024L * 1024L;
+        long budget = PanelConfig.Client.textureBudgetMB * 1024L * 1024L;
         long memory = 0;
         for (Panel panel : panels.values()) memory += panel.bytes();
         for (Panel panel : panels.values()) {

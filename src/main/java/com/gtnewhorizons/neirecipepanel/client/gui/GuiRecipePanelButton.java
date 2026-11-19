@@ -17,7 +17,7 @@ import com.gtnewhorizons.neirecipepanel.ModItems;
 import com.gtnewhorizons.neirecipepanel.NEIRecipePanelsMod;
 import com.gtnewhorizons.neirecipepanel.client.recipe.RecipeCapture;
 import com.gtnewhorizons.neirecipepanel.client.recipe.RecipeResolver;
-import com.gtnewhorizons.neirecipepanel.config.Config;
+import com.gtnewhorizons.neirecipepanel.config.PanelConfig;
 import com.gtnewhorizons.neirecipepanel.network.MakeRecipePanelMessage;
 import com.gtnewhorizons.neirecipepanel.recipe.RecipeSnapshot;
 
@@ -45,7 +45,7 @@ public class GuiRecipePanelButton extends GuiRecipeButton {
             && RecipeResolver.hasCraftingHandler(handlerRef.handler);
         boolean canImprint = canImprint(Minecraft.getMinecraft().thePlayer);
         this.enabled = supported && canImprint;
-        this.visible = canImprint || !Config.buttonRequiresBlueprint;
+        this.visible = canImprint || !PanelConfig.Client.buttonRequiresBlueprint;
     }
 
     @Override
@@ -118,8 +118,13 @@ public class GuiRecipePanelButton extends GuiRecipeButton {
         if (player == null) {
             return false;
         }
-        // The server decides whether creative imprints spend a blueprint.
-        if (player.capabilities.isCreativeMode) {
+        // Server settings are synced to the client by GTNHLib; OP_ONLY is still checked by the server.
+        boolean creative = player.capabilities.isCreativeMode;
+        PanelConfig.PanelMode mode = PanelConfig.Server.panelMode;
+        if (mode == PanelConfig.PanelMode.DISABLED || mode == PanelConfig.PanelMode.CREATIVE_ONLY && !creative) {
+            return false;
+        }
+        if (creative && !PanelConfig.Server.consumeInCreative) {
             return true;
         }
         if (isBlueprint(player.inventory.getItemStack())) {

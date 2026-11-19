@@ -13,8 +13,8 @@
 		"logoFile": "",
 		"screenshots": [],
 		"parent": "",
-		"requiredMods": ["NotEnoughItems@[2.8.152,)"],
-		"dependencies": ["NotEnoughItems@[2.8.152,)"],
+		"requiredMods": ["NotEnoughItems@[2.8.152,)", "gtnhlib@[0.11.54,)"],
+		"dependencies": ["NotEnoughItems@[2.8.152,)", "gtnhlib@[0.11.54,)"],
 		"dependants": [],
 		"useDependencyInformation": true
 	}]

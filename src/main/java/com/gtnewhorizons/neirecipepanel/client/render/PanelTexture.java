@@ -14,7 +14,7 @@ import org.lwjgl.opengl.GL12;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.opengl.GLContext;
 
-import com.gtnewhorizons.neirecipepanel.config.Config;
+import com.gtnewhorizons.neirecipepanel.config.PanelConfig;
 
 /** A colour-only, mipmapped panel image; drawing happens in {@link PanelScratch} and is copied in. */
 final class PanelTexture {
@@ -33,7 +33,7 @@ final class PanelTexture {
     }
 
     static int supersample() {
-        return Math.max(1, Math.min(4, Config.supersample));
+        return Math.max(1, Math.min(4, PanelConfig.Client.supersample));
     }
 
     static long estimatedBytes(int logicalSide) {

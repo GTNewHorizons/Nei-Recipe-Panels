@@ -36,6 +36,9 @@
 dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
+    // Config library; 0.11.54 ships in GT-New-Horizons-Modpack 2.9.0.
+    implementation("com.github.GTNewHorizons:GTNHLib:0.11.54:dev")
+
     // Matches the NotEnoughItems version shipped in GT-New-Horizons-Modpack.
     implementation("com.github.GTNewHorizons:NotEnoughItems:2.8.155-GTNH:dev")
 

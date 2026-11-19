@@ -21,12 +21,19 @@ After pack updates, panels show the current recipe and keep your selected items 
 possible. If a recipe is missing or cannot be matched uniquely, the panel shows a notice;
 re-imprint it to choose a replacement.
 
-## Client config
+## Config
 
-- `textureBudgetMB` (default 192): video memory for cached panel images; panels beyond
-  it show a capacity notice.
-- `supersample` (default 3): panel image resolution; lower fits more panels.
-- `buttonRequiresBlueprint` (default true): set false to always show the NEI button.
+`config/nei-recipe-panels.cfg`, also editable in-game from the mod list (GTNHLib).
+
+- `recipe.registerBlueprintRecipe` (default true): built-in blueprint recipe; needs a restart.
+- `server.panelMode` (default EVERYONE): who may imprint (DISABLED, CREATIVE_ONLY, OP_ONLY,
+  EVERYONE). Synced to clients.
+- `server.consumeInCreative` (default false): creative imprints spend a blueprint. Synced.
+- `server.maxIngredients`, `server.maxSnapshotBytes`: limits on imprinted recipe data.
+- `client.textureBudgetMB` (default 192): video memory for cached panel images; panels
+  beyond it show a capacity notice.
+- `client.supersample` (default 3): panel image resolution; lower fits more panels.
+- `client.buttonRequiresBlueprint` (default true): set false to always show the NEI button.
 
 ## License
 
