@@ -165,8 +165,7 @@ public final class PanelFboManager {
                 panel.capacityLimited = true;
                 continue;
             }
-            panel.prepare();
-            if (panel.renderFailed) continue;
+            if (!panel.prepare() || panel.renderFailed) continue;
             long requiredBytes = PanelTexture.estimatedBytes(panel.width);
             if (memory - previousBytes + requiredBytes > MAX_TEXTURE_BYTES) {
                 panel.capacityLimited = true;
@@ -304,14 +303,17 @@ public final class PanelFboManager {
             return null;
         }
 
-        private void prepare() {
+        /** Returns false while the panel cannot be drawn yet (NEI still loading) or has failed. */
+        private boolean prepare() {
             try {
                 if (resolution == null) {
-                    resolution = RecipeResolver.INSTANCE.resolve(snapshot);
+                    RecipeResolver.Resolution resolved = RecipeResolver.INSTANCE.resolve(snapshot);
+                    if (resolved.status() == RecipeResolver.Status.LOADING) return false;
+                    resolution = resolved;
                     recipe = resolution.recipe();
                     if (recipe != null) widget = new PanelRecipeWidget(recipe);
                 }
-                if (recipe == null) return;
+                if (recipe == null) return true;
                 recipe.refresh();
                 recipe.name();
                 HandlerInfo info = GuiRecipeTab.getHandlerInfo(recipe.handler);
@@ -336,8 +338,10 @@ public final class PanelFboManager {
                 originX = (side - bodyWidth) / 2 - minX;
                 originY = 14 + (side - 14 - bodyHeight) / 2 - minY;
                 widget.setLocation(originX, originY);
+                return true;
             } catch (RuntimeException | LinkageError e) {
                 fail(e);
+                return false;
             }
         }
 

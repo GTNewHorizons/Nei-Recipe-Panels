@@ -18,6 +18,7 @@ nei-recipe-panels.recipe.missing=Recipe no longer available. Re-imprint this pan
 nei-recipe-panels.recipe.ambiguous=Multiple recipes match. Re-imprint this panel.
 nei-recipe-panels.recipe.invalid=Unsupported or invalid saved recipe data.
 nei-recipe-panels.recipe.unsupported=This recipe handler cannot be displayed.
+nei-recipe-panels.recipe.loading=Waiting for NEI to finish loading recipes.
 nei-recipe-panels.render.unavailable=Framebuffer rendering unavailable
 nei-recipe-panels.render.failed=Recipe rendering failed
 nei-recipe-panels.render.loading=Loading recipe

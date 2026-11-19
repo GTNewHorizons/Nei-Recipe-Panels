@@ -150,15 +150,35 @@ class RecipeResolverTest {
     }
 
     @Test
-    void duplicateRecipesWithinOneQueryRemainAmbiguous() {
+    void identicalDuplicateRecipesResolveToTheFirst() {
         FixtureRecipe sameRecipe = recipe(slot(fixture.stack(first, 1)), slot(fixture.stack(output, 1)));
         Handler original = handler(sameRecipe);
         Handler duplicates = handler(sameRecipe, sameRecipe);
 
         RecipeResolver.Resolution resolution = resolver(duplicates).resolveFresh(document(original));
 
-        assertEquals(RecipeResolver.Status.AMBIGUOUS, resolution.status());
-        assertNull(resolution.recipe());
+        assertEquals(RecipeResolver.Status.READY, resolution.status());
+        assertEquals(0, resolution.recipe().index);
+    }
+
+    @Test
+    void nothingIsResolvedOrCachedWhileNeiIsStillLoadingHandlers() {
+        Handler original = handler(recipe(slot(fixture.stack(first, 1)), slot(fixture.stack(output, 1))));
+        boolean[] loaded = { false };
+        RecipeResolver resolver = new RecipeResolver(
+            (id, anchor) -> Collections.singletonList(original),
+            () -> loaded[0]);
+        NBTTagCompound saved = document(original);
+
+        assertEquals(
+            RecipeResolver.Status.LOADING,
+            resolver.resolve(saved)
+                .status());
+        loaded[0] = true;
+        assertEquals(
+            RecipeResolver.Status.READY,
+            resolver.resolve(saved)
+                .status());
     }
 
     @Test
