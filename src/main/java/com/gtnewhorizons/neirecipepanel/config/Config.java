@@ -25,6 +25,7 @@ public class Config {
 
     public static int textureBudgetMB = 192;
     public static int supersample = 3;
+    public static boolean buttonRequiresBlueprint = true;
 
     public static void synchronizeConfiguration(File configFile) {
         Configuration configuration = new Configuration(configFile);
@@ -77,6 +78,11 @@ public class Config {
             1,
             4,
             "Panel image resolution multiplier. Lower values fit more panels in the same budget.");
+        buttonRequiresBlueprint = configuration.getBoolean(
+            "buttonRequiresBlueprint",
+            "client",
+            true,
+            "Only show the NEI imprint button while a Recipe Blueprint is in your inventory (always shown in creative).");
 
         if (configuration.hasChanged()) {
             configuration.save();

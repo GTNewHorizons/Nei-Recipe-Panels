@@ -9,10 +9,13 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.StatCollector;
 
+import org.lwjgl.opengl.GL11;
+
 import com.gtnewhorizons.neirecipepanel.ModItems;
 import com.gtnewhorizons.neirecipepanel.NEIRecipePanelsMod;
 import com.gtnewhorizons.neirecipepanel.client.recipe.RecipeCapture;
 import com.gtnewhorizons.neirecipepanel.client.recipe.RecipeResolver;
+import com.gtnewhorizons.neirecipepanel.config.Config;
 import com.gtnewhorizons.neirecipepanel.network.MakeRecipePanelMessage;
 import com.gtnewhorizons.neirecipepanel.recipe.RecipeSnapshot;
 
@@ -26,14 +29,37 @@ public class GuiRecipePanelButton extends GuiRecipeButton {
     private Boolean supported;
 
     public GuiRecipePanelButton(RecipeHandlerRef handlerRef, int x, int y) {
-        super(handlerRef, x, y, BUTTON_ID, "P");
+        super(handlerRef, x, y, BUTTON_ID, "");
     }
 
     @Override
     public void update() {
         super.update();
-        if (supported == null) supported = RecipeCapture.capture(handlerRef.handler, handlerRef.recipeIndex) != null;
-        this.enabled = supported && hasBlueprint(Minecraft.getMinecraft().thePlayer);
+        if (supported == null) supported = RecipeCapture.capture(handlerRef.handler, handlerRef.recipeIndex) != null
+            && RecipeResolver.hasCraftingHandler(handlerRef.handler);
+        boolean canImprint = canImprint(Minecraft.getMinecraft().thePlayer);
+        this.enabled = supported && canImprint;
+        this.visible = canImprint || !Config.buttonRequiresBlueprint;
+    }
+
+    @Override
+    public boolean contains(int mouseX, int mouseY) {
+        return this.visible && super.contains(mouseX, mouseY);
+    }
+
+    /** A small framed sheet in NEI's button label colours, so themes recolour it. */
+    @Override
+    protected void drawContent(Minecraft minecraft, int mouseX, int mouseY, boolean mouseOver) {
+        int color = 0xFF000000 | getTextColour(mouseOver);
+        int left = this.xPosition + (this.width - 8) / 2;
+        int top = this.yPosition + (this.height - 8) / 2;
+        drawRect(left, top, left + 8, top + 1, color);
+        drawRect(left, top + 7, left + 8, top + 8, color);
+        drawRect(left, top + 1, left + 1, top + 7, color);
+        drawRect(left + 7, top + 1, left + 8, top + 7, color);
+        drawRect(left + 2, top + 2, left + 6, top + 3, color);
+        drawRect(left + 2, top + 4, left + 6, top + 5, color);
+        GL11.glColor4f(1, 1, 1, 1);
     }
 
     @Override
@@ -75,9 +101,13 @@ public class GuiRecipePanelButton extends GuiRecipeButton {
     @Override
     public void drawItemOverlay() {}
 
-    private static boolean hasBlueprint(EntityPlayer player) {
+    private static boolean canImprint(EntityPlayer player) {
         if (player == null) {
             return false;
+        }
+        // The server decides whether creative imprints spend a blueprint.
+        if (player.capabilities.isCreativeMode) {
+            return true;
         }
         if (isBlueprint(player.inventory.getItemStack())) {
             return true;
