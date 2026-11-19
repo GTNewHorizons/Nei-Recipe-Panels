@@ -47,7 +47,7 @@ public final class PanelFboManager {
     private PanelFboManager() {}
 
     public void reload() {
-        PanelDrawBatch.INSTANCE.reload();
+        PanelCamera.INSTANCE.reload();
         if (panels.values()
             .stream()
             .anyMatch(panel -> panel.bytes() > 0)) {

@@ -2,6 +2,7 @@ package com.gtnewhorizons.neirecipepanel.client.render;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.OpenGlHelper;
+import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.tileentity.TileEntitySpecialRenderer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
@@ -12,7 +13,10 @@ import org.lwjgl.opengl.GL11;
 
 import com.gtnewhorizons.neirecipepanel.block.RecipePanelTile;
 
-/** Submits visible panel faces to the shared draw batch. */
+/**
+ * Draws panels in the block-entity pass, before translucent terrain, so water and stained glass in front of a panel
+ * still blend over it.
+ */
 public class RecipePanelRenderer extends TileEntitySpecialRenderer {
 
     private static final int PLACEHOLDER_SIDE = 176;
@@ -27,7 +31,7 @@ public class RecipePanelRenderer extends TileEntitySpecialRenderer {
         if (!((RecipePanelTile) tile).hasSnapshot()) return;
 
         ForgeDirection face = ForgeDirection.getOrientation(tile.getBlockMetadata());
-        Vec3 eye = PanelDrawBatch.INSTANCE.camera(partialTicks);
+        Vec3 eye = PanelCamera.INSTANCE.camera(partialTicks);
         double centreX = tile.xCoord + .5 - face.offsetX * REACH;
         double centreY = tile.yCoord + .5 - face.offsetY * REACH;
         double centreZ = tile.zCoord + .5 - face.offsetZ * REACH;
@@ -37,28 +41,34 @@ public class RecipePanelRenderer extends TileEntitySpecialRenderer {
         PanelFboManager.Panel panel = PanelFboManager.INSTANCE.visible(recipeTile);
         if (panel.ready()) {
             boolean animated = PanelFboManager.INSTANCE.requestAnimation(recipeTile, eye, centreX, centreY, centreZ);
-            PanelDrawBatch.INSTANCE.submit(recipeTile, panel, x, y, z, face, animated);
+            try (PanelBlitState ignored = new PanelBlitState()) {
+                beginFace(x, y, z, face);
+                GL11.glEnable(GL11.GL_DEPTH_TEST);
+                GL11.glDepthFunc(GL11.GL_LEQUAL);
+                GL11.glDepthMask(true);
+                if (panel.transparent()) {
+                    GL11.glEnable(GL11.GL_BLEND);
+                    GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+                } else GL11.glDisable(GL11.GL_BLEND);
+                GL11.glEnable(GL11.GL_TEXTURE_2D);
+                GL11.glColor4f(1, 1, 1, 1);
+                panel.bindTexture(animated);
+                float half = MAX_EXTENT / 2F;
+                Tessellator tessellator = Tessellator.instance;
+                tessellator.startDrawingQuads();
+                tessellator.addVertexWithUV(-half, -half, 0, 0, 0);
+                tessellator.addVertexWithUV(half, -half, 0, 1, 0);
+                tessellator.addVertexWithUV(half, half, 0, 1, 1);
+                tessellator.addVertexWithUV(-half, half, 0, 0, 1);
+                tessellator.draw();
+            }
             return;
         }
         float halfW = MAX_EXTENT / 2F;
         float halfH = MAX_EXTENT / 2F;
 
         try (PanelBlitState ignored = new PanelBlitState()) {
-            OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
-            GL11.glMatrixMode(GL11.GL_TEXTURE);
-            GL11.glLoadIdentity();
-            GL11.glMatrixMode(GL11.GL_MODELVIEW);
-            GL11.glTranslated(x + 0.5D, y + 0.5D, z + 0.5D);
-            GL11.glTranslatef(-face.offsetX * REACH, -face.offsetY * REACH, -face.offsetZ * REACH);
-            orientOutward(face);
-
-            GL11.glDisable(GL11.GL_LIGHTING);
-            // full-bright, like the GUI it mirrors - block/sky light and torch colour shouldn't tint it
-            OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, 240F, 240F);
-
-            GL11.glDisable(GL11.GL_CULL_FACE);
-            GL11.glEnable(GL11.GL_ALPHA_TEST);
-            GL11.glAlphaFunc(GL11.GL_GREATER, 0.1F);
+            beginFace(x, y, z, face);
             GL11.glTranslatef(-halfW, halfH, 0);
             GL11.glScalef(MAX_EXTENT / PLACEHOLDER_SIDE, -MAX_EXTENT / PLACEHOLDER_SIDE, 1);
             PanelBackdrop.draw(PLACEHOLDER_SIDE, PLACEHOLDER_SIDE);
@@ -71,6 +81,23 @@ public class RecipePanelRenderer extends TileEntitySpecialRenderer {
                 PLACEHOLDER_SIDE,
                 PanelBackdrop.textColor());
         }
+    }
+
+    /** Moves to the panel's centre facing out of the wall: +x right, +y up, +z towards the viewer; full-bright. */
+    private static void beginFace(double x, double y, double z, ForgeDirection face) {
+        OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
+        GL11.glMatrixMode(GL11.GL_TEXTURE);
+        GL11.glLoadIdentity();
+        GL11.glMatrixMode(GL11.GL_MODELVIEW);
+        GL11.glTranslated(x + 0.5D, y + 0.5D, z + 0.5D);
+        GL11.glTranslatef(-face.offsetX * REACH, -face.offsetY * REACH, -face.offsetZ * REACH);
+        orientOutward(face);
+        GL11.glDisable(GL11.GL_LIGHTING);
+        // Full-bright like the GUI it mirrors; block light and torch colour shouldn't tint it.
+        OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, 240F, 240F);
+        GL11.glDisable(GL11.GL_CULL_FACE);
+        GL11.glEnable(GL11.GL_ALPHA_TEST);
+        GL11.glAlphaFunc(GL11.GL_GREATER, 0.1F);
     }
 
     private static void orientOutward(ForgeDirection face) {
