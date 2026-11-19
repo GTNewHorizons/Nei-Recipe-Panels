@@ -23,6 +23,9 @@ public class Config {
     public static int maxIngredients = RecipeSnapshot.MAX_SLOTS;
     public static int maxSnapshotBytes = 16384;
 
+    public static int textureBudgetMB = 192;
+    public static int supersample = 3;
+
     public static void synchronizeConfiguration(File configFile) {
         Configuration configuration = new Configuration(configFile);
         configuration.load();
@@ -59,6 +62,21 @@ public class Config {
             512,
             262144,
             "Maximum uncompressed bytes in an imprinted recipe document, before it is queued or saved.");
+
+        textureBudgetMB = configuration.getInt(
+            "textureBudgetMB",
+            "client",
+            192,
+            32,
+            4096,
+            "Video memory budget for cached panel images. Panels beyond it show a capacity notice.");
+        supersample = configuration.getInt(
+            "supersample",
+            "client",
+            3,
+            1,
+            4,
+            "Panel image resolution multiplier. Lower values fit more panels in the same budget.");
 
         if (configuration.hasChanged()) {
             configuration.save();

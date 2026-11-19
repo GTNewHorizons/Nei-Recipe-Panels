@@ -22,6 +22,7 @@ import com.gtnewhorizons.neirecipepanel.NEIRecipePanelsMod;
 import com.gtnewhorizons.neirecipepanel.block.RecipePanelTile;
 import com.gtnewhorizons.neirecipepanel.client.recipe.RecipeResolver;
 import com.gtnewhorizons.neirecipepanel.client.recipe.ResolvedRecipe;
+import com.gtnewhorizons.neirecipepanel.config.Config;
 import com.gtnewhorizons.neirecipepanel.config.PanelSettings;
 
 import codechicken.nei.PositionedStack;
@@ -34,7 +35,6 @@ public final class PanelFboManager {
 
     public static final PanelFboManager INSTANCE = new PanelFboManager();
     private static final int MAX_PANELS = 128;
-    private static final long MAX_TEXTURE_BYTES = 96L * 1024 * 1024;
     private static final long FRAME_BUDGET_NS = 2_000_000;
     private static final long EVICT_AFTER_NS = 10_000_000_000L;
     private static final double ANIMATION_DISTANCE_SQUARED = 3 * 3;
@@ -56,6 +56,11 @@ public final class PanelFboManager {
                 for (Panel panel : panels.values()) panel.dispose();
             }
         }
+        if (PanelScratch.bytes() > 0) {
+            try (RenderState ignored = new RenderState()) {
+                PanelScratch.dispose();
+            }
+        }
         panels.clear();
         bindings.clear();
         RecipeResolver.INSTANCE.clear();
@@ -64,15 +69,21 @@ public final class PanelFboManager {
     public Panel visible(RecipePanelTile tile) {
         if (!tile.hasSnapshot()) return unavailable;
         Binding binding = bindings.get(tile);
+        boolean current = binding != null && binding.contentVersion == tile.contentVersion();
+        // Over capacity: retry only once a slot frees, without copying the snapshot every frame.
+        if (current && binding.panel == unavailable && panels.size() >= MAX_PANELS) return unavailable;
         Panel panel;
-        if (binding != null && binding.contentVersion == tile.contentVersion() && !binding.panel.evicted) {
+        if (current && binding.panel != unavailable && !binding.panel.evicted) {
             panel = binding.panel;
         } else {
             NBTTagCompound snapshot = tile.getSnapshot();
             Key key = new Key(snapshot, tile.getSettings());
             panel = panels.get(key);
             if (panel == null) {
-                if (panels.size() >= MAX_PANELS) return unavailable;
+                if (panels.size() >= MAX_PANELS) {
+                    bindings.put(tile, new Binding(tile.contentVersion(), unavailable));
+                    return unavailable;
+                }
                 panel = new Panel(snapshot, key.settings);
                 panels.put(key, panel);
             }
@@ -136,8 +147,12 @@ public final class PanelFboManager {
                 dispose.add(panel);
             }
         }
+        if (!framebuffersEnabled && PanelScratch.bytes() > 0) {
+            if (dispose == null) dispose = new ArrayList<>();
+        }
         if (dispose != null) {
             try (RenderState ignored = new RenderState()) {
+                if (!framebuffersEnabled) PanelScratch.dispose();
                 for (Panel panel : dispose) {
                     if (panel.evicted || panel.renderFailed || !framebuffersEnabled) panel.dispose();
                     else panel.disposeAnimation();
@@ -145,6 +160,7 @@ public final class PanelFboManager {
             }
         }
         if (!framebuffersEnabled) return;
+        long budget = Config.textureBudgetMB * 1024L * 1024L;
         long memory = 0;
         for (Panel panel : panels.values()) memory += panel.bytes();
         for (Panel panel : panels.values()) {
@@ -152,7 +168,7 @@ public final class PanelFboManager {
             if (panel.ready()) {
                 if (!panel.animationRequested(frame) || panel.lastAnimationTick == clientTick) continue;
                 long additionalBytes = 2 * PanelTexture.estimatedBytes(panel.width) - panel.animationBytes();
-                if (memory + additionalBytes > MAX_TEXTURE_BYTES) continue;
+                if (memory + additionalBytes > budget) continue;
                 long previousBytes = panel.bytes();
                 panel.animate(clientTick);
                 memory += panel.bytes() - previousBytes;
@@ -161,13 +177,13 @@ public final class PanelFboManager {
             }
             long previousBytes = panel.bytes();
             panel.capacityLimited = false;
-            if (memory >= MAX_TEXTURE_BYTES && previousBytes == 0) {
+            if (memory >= budget && previousBytes == 0) {
                 panel.capacityLimited = true;
                 continue;
             }
             if (!panel.prepare() || panel.renderFailed) continue;
             long requiredBytes = PanelTexture.estimatedBytes(panel.width);
-            if (memory - previousBytes + requiredBytes > MAX_TEXTURE_BYTES) {
+            if (memory - previousBytes + requiredBytes > budget) {
                 panel.capacityLimited = true;
                 continue;
             }
