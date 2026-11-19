@@ -24,7 +24,7 @@ final class StackIdentity {
         if (stack == null || stack.getItem() == null) return null;
         if (StackInfo.isFluidDisplayItem(stack)) {
             FluidStack fluid = StackInfo.getFluid(stack);
-            if (fluid == null) return null;
+            if (fluid == null || fluid.getFluid() == null) return null;
             NBTTagCompound identity = new NBTTagCompound();
             identity.setString(
                 "fluid",

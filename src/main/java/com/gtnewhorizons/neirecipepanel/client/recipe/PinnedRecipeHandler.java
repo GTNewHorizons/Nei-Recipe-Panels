@@ -7,6 +7,8 @@ import net.minecraft.client.gui.inventory.GuiContainer;
 import net.minecraft.inventory.Container;
 import net.minecraft.item.ItemStack;
 
+import com.gtnewhorizons.neirecipepanel.NEIRecipePanelsMod;
+
 import codechicken.nei.PositionedStack;
 import codechicken.nei.api.IOverlayHandler;
 import codechicken.nei.api.IRecipeOverlayRenderer;
@@ -28,6 +30,7 @@ final class PinnedRecipeHandler implements IRecipeHandler {
     private final ResolvedRecipe recipe;
     private final IRecipeHandler handler;
     private final int index;
+    private boolean refreshFailed;
 
     PinnedRecipeHandler(ResolvedRecipe recipe) {
         this.recipe = recipe;
@@ -134,7 +137,13 @@ final class PinnedRecipeHandler implements IRecipeHandler {
     @Override
     public void onUpdate() {
         handler.onUpdate();
-        recipe.refresh();
+        try {
+            recipe.refresh();
+        } catch (RuntimeException | LinkageError e) {
+            // Keep the last reconciled stacks rather than crashing the recipe screen every tick.
+            if (!refreshFailed) NEIRecipePanelsMod.LOG.warn("Could not refresh pinned recipe", e);
+            refreshFailed = true;
+        }
     }
 
     private static List<PositionedStack> pinned(List<PositionedStack> stacks) {
