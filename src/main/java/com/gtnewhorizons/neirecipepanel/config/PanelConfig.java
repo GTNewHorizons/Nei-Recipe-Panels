@@ -73,12 +73,12 @@ public final class PanelConfig {
     public static final class Client {
 
         @Config.Comment("Video memory budget for cached panel images. Panels beyond it show a capacity notice.")
-        @Config.DefaultInt(192)
+        @Config.DefaultInt(128)
         @Config.RangeInt(min = 32, max = 4096)
         public static int textureBudgetMB = 256;
 
         @Config.Comment("Panel image resolution multiplier. Lower values fit more panels in the same budget.")
-        @Config.DefaultInt(3)
+        @Config.DefaultInt(2)
         @Config.RangeInt(min = 1, max = 4)
         public static int supersample = 3;
 
