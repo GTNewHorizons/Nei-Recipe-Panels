@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
 import java.util.function.BooleanSupplier;
 
 import net.minecraft.item.ItemStack;
@@ -15,6 +16,7 @@ import net.minecraft.nbt.NBTTagList;
 
 import com.google.gson.JsonParser;
 import com.gtnewhorizons.neirecipepanel.NEIRecipePanelsMod;
+import com.gtnewhorizons.neirecipepanel.client.render.RecipeAppearance;
 import com.gtnewhorizons.neirecipepanel.recipe.ChoiceMatcher;
 import com.gtnewhorizons.neirecipepanel.recipe.RecipeSnapshot;
 
@@ -32,13 +34,15 @@ public final class RecipeResolver {
 
     public static final RecipeResolver INSTANCE = new RecipeResolver(
         (id, output) -> GuiCraftingRecipe.getCraftingHandlers("recipeId", output, id),
-        NEIClientConfig::isLoaded);
+        NEIClientConfig::isLoaded,
+        RecipeAppearance::same);
     private static final int MAX_CACHED_RECIPES = 128;
     private static final int MAX_CANDIDATES = 16384;
     private static final int MAX_OUTPUT_ANCHORS = 16;
     private final Map<NBTTagCompound, Resolution> cache = new LinkedHashMap<>(16, 0.75F, true);
     private final BiFunction<Recipe.RecipeId, ItemStack, List<ICraftingHandler>> craftingLookup;
     private final BooleanSupplier handlersLoaded;
+    private final BiPredicate<RecipeHandlerRef, RecipeHandlerRef> sameAppearance;
 
     RecipeResolver(BiFunction<Recipe.RecipeId, ItemStack, List<ICraftingHandler>> craftingLookup) {
         this(craftingLookup, () -> true);
@@ -46,8 +50,14 @@ public final class RecipeResolver {
 
     RecipeResolver(BiFunction<Recipe.RecipeId, ItemStack, List<ICraftingHandler>> craftingLookup,
         BooleanSupplier handlersLoaded) {
+        this(craftingLookup, handlersLoaded, (a, b) -> true);
+    }
+
+    RecipeResolver(BiFunction<Recipe.RecipeId, ItemStack, List<ICraftingHandler>> craftingLookup,
+        BooleanSupplier handlersLoaded, BiPredicate<RecipeHandlerRef, RecipeHandlerRef> sameAppearance) {
         this.craftingLookup = craftingLookup;
         this.handlersLoaded = handlersLoaded;
+        this.sameAppearance = sameAppearance;
     }
 
     /** Whether NEI has a crafting handler for this category; usage-only handlers cannot be looked up again. */
@@ -101,9 +111,11 @@ public final class RecipeResolver {
                 IRecipeHandler handler = candidate.handler;
                 int index = candidate.recipeIndex;
                 List<PositionedStack> outputs = outputs(handler, index);
-                candidates.add(candidate);
-                if (matchesInputs(handler, index, id) && matchesOutputs(outputs, snapshot.outputs()))
-                    exact.add(candidate);
+                boolean inputs = matchesInputs(handler, index, id);
+                if (inputs && matchesOutputs(outputs, snapshot.outputs())) exact.add(candidate);
+                // After a pack update, keep a changed recipe only with a second signal: the same inputs or the same
+                // main result. Sharing one byproduct alone could reopen an unrelated recipe.
+                else if (inputs || accepts(outputs, StackIdentity.of(id.getResult()))) candidates.add(candidate);
             }
             List<RecipeHandlerRef> matches = exact.isEmpty() ? candidates : exact;
             if (matches.isEmpty()) return Resolution.failed(Status.MISSING);
@@ -171,12 +183,20 @@ public final class RecipeResolver {
         return candidates;
     }
 
-    /** Byte-identical duplicates (common in large packs) display the same, so any of them will do. */
-    private static boolean identical(List<RecipeHandlerRef> matches) {
-        NBTTagCompound first = fingerprint(matches.get(0).handler, matches.get(0).recipeIndex);
+    /**
+     * Exact duplicates (common in large packs) may resolve to the first, but only when nothing a player could see
+     * differs: same stacks, chances and slot types, and the same rendered image. Handlers draw their own data (e.g.
+     * GregTech EU/t and duration), so stacks alone can't prove two recipes equivalent. Otherwise stay ambiguous.
+     */
+    private boolean identical(List<RecipeHandlerRef> matches) {
+        RecipeHandlerRef first = matches.get(0);
+        NBTTagCompound fingerprint = fingerprint(first.handler, first.recipeIndex);
         for (int i = 1; i < matches.size(); i++) {
             RecipeHandlerRef match = matches.get(i);
-            if (!first.equals(fingerprint(match.handler, match.recipeIndex))) return false;
+            if (!fingerprint.equals(fingerprint(match.handler, match.recipeIndex))) return false;
+        }
+        for (int i = 1; i < matches.size(); i++) {
+            if (!sameAppearance.test(first, matches.get(i))) return false;
         }
         return true;
     }
@@ -198,6 +218,11 @@ public final class RecipeResolver {
             NBTTagCompound slot = new NBTTagCompound();
             slot.setInteger("x", stack.relx);
             slot.setInteger("y", stack.rely);
+            slot.setInteger("chance", stack.getChance());
+            slot.setString(
+                "type",
+                stack.getClass()
+                    .getName());
             NBTTagList items = new NBTTagList();
             for (ItemStack item : stack.items) {
                 NBTTagCompound data = StackInfo.itemStackToNBT(item);

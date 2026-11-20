@@ -162,6 +162,54 @@ class RecipeResolverTest {
     }
 
     @Test
+    void sharedByproductAloneDoesNotReopenAnUnrelatedRecipe() {
+        Handler original = handler(
+            multiOutput(
+                slot(fixture.stack(first, 1)),
+                slot(fixture.stack(output, 1)),
+                slot(fixture.stack(byproduct, 1))));
+        Item unrelated = fixture.item("unrelated");
+        Handler current = handler(
+            multiOutput(
+                slot(fixture.stack(second, 1)),
+                slot(fixture.stack(unrelated, 1)),
+                slot(fixture.stack(byproduct, 1))));
+
+        RecipeResolver.Resolution resolution = resolver(current).resolveFresh(document(original));
+
+        assertEquals(RecipeResolver.Status.MISSING, resolution.status());
+        assertNull(resolution.recipe());
+    }
+
+    @Test
+    void duplicatesWithDifferentOutputChanceStayAmbiguous() {
+        FixtureRecipe quarter = recipe(slot(fixture.stack(first, 1)), chance(slot(fixture.stack(output, 1)), 2500));
+        FixtureRecipe threeQuarters = recipe(
+            slot(fixture.stack(first, 1)),
+            chance(slot(fixture.stack(output, 1)), 7500));
+
+        RecipeResolver.Resolution resolution = resolver(handler(threeQuarters, quarter))
+            .resolveFresh(document(handler(quarter)));
+
+        assertEquals(RecipeResolver.Status.AMBIGUOUS, resolution.status());
+        assertNull(resolution.recipe());
+    }
+
+    @Test
+    void duplicatesThatDrawDifferentlyStayAmbiguous() {
+        // e.g. GregTech recipes with the same stacks but different EU/t or duration text.
+        FixtureRecipe sameRecipe = recipe(slot(fixture.stack(first, 1)), slot(fixture.stack(output, 1)));
+        RecipeResolver resolver = new RecipeResolver(
+            (id, anchor) -> Collections.singletonList(handler(sameRecipe, sameRecipe)),
+            () -> true,
+            (a, b) -> false);
+
+        RecipeResolver.Resolution resolution = resolver.resolveFresh(document(handler(sameRecipe)));
+
+        assertEquals(RecipeResolver.Status.AMBIGUOUS, resolution.status());
+    }
+
+    @Test
     void nothingIsResolvedOrCachedWhileNeiIsStillLoadingHandlers() {
         Handler original = handler(recipe(slot(fixture.stack(first, 1)), slot(fixture.stack(output, 1))));
         boolean[] loaded = { false };
@@ -399,6 +447,11 @@ class RecipeResolverTest {
 
     private static PositionedStack slot(ItemStack... alternatives) {
         return new PositionedStack(alternatives, 8, 12, false);
+    }
+
+    private static PositionedStack chance(PositionedStack stack, int chance) {
+        stack.setChance(chance);
+        return stack;
     }
 
     private static NBTTagCompound document(IRecipeHandler handler) {

@@ -138,6 +138,22 @@ final class PanelTexture {
         }
     }
 
+    /** Draws at 1:1 scale on a transparent target and returns its RGBA bytes (bottom row first), or null. */
+    static byte[] pixels(int logicalSide, Runnable draw) {
+        if (!OpenGlHelper.isFramebufferEnabled()) return null;
+        try (RenderState state = new RenderState()) {
+            state.prepareGui();
+            drawInto(logicalSide, logicalSide, draw);
+            PanelScratch.bind();
+            ByteBuffer rgba = GLAllocation.createDirectByteBuffer(logicalSide * logicalSide * 4);
+            GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 1);
+            GL11.glReadPixels(0, 0, logicalSide, logicalSide, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, rgba);
+            byte[] bytes = new byte[rgba.capacity()];
+            rgba.get(bytes);
+            return bytes;
+        }
+    }
+
     private static void drawInto(int logicalSide, int pixels, Runnable draw) {
         PanelScratch.begin(pixels);
         GL11.glMatrixMode(GL11.GL_PROJECTION);
