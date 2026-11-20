@@ -105,7 +105,7 @@ public class ConfigurePanelMessage implements IMessage {
             World world = player.worldObj;
             if (world == null || world.isRemote
                 || message.y < 0
-                || message.y >= world.getActualHeight()
+                || message.y >= world.getHeight()
                 || message.x < -WORLD_COORDINATE_LIMIT
                 || message.x >= WORLD_COORDINATE_LIMIT
                 || message.z < -WORLD_COORDINATE_LIMIT

@@ -20,7 +20,24 @@ public class PanelInputHandler implements IContainerInputHandler {
     public boolean lastKeyTyped(GuiContainer gui, char keyChar, int keyCode) {
         boolean recipe = keyCode == keyCode("recipe.recipe", Keyboard.KEY_R);
         boolean usage = keyCode == keyCode("recipe.usage", Keyboard.KEY_U);
-        if (!recipe && !usage) return false;
+        return open(gui, recipe, usage);
+    }
+
+    /**
+     * Newer NEI runs hotkeys before lastKeyTyped; without this its own usage lookup wins (the blueprint wipe recipe
+     * makes every panel a usage ingredient). No @Override: older NEI lacks the hook.
+     */
+    public boolean onHotkeyPressed(GuiContainer gui) {
+        return open(gui, isDown("recipe.recipe", Keyboard.KEY_R), isDown("recipe.usage", Keyboard.KEY_U));
+    }
+
+    private static boolean isDown(String neiBinding, int fallback) {
+        int code = keyCode(neiBinding, fallback);
+        return code > 0 && code < Keyboard.KEYBOARD_SIZE && Keyboard.isKeyDown(code);
+    }
+
+    private static boolean open(GuiContainer gui, boolean recipe, boolean usage) {
+        if (recipe == usage) return false;
 
         ItemStack hovered = GuiContainerManager.getStackMouseOver(gui);
         if (hovered == null || hovered.getItem() != ModItems.recipePanel) return false;

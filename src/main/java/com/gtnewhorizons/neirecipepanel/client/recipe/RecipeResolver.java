@@ -1,11 +1,14 @@
 package com.gtnewhorizons.neirecipepanel.client.recipe;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiFunction;
+import java.util.function.BooleanSupplier;
+import java.util.function.Predicate;
 
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
@@ -13,9 +16,11 @@ import net.minecraft.nbt.NBTTagList;
 
 import com.google.gson.JsonParser;
 import com.gtnewhorizons.neirecipepanel.NEIRecipePanelsMod;
+import com.gtnewhorizons.neirecipepanel.client.render.RecipeAppearance;
 import com.gtnewhorizons.neirecipepanel.recipe.ChoiceMatcher;
 import com.gtnewhorizons.neirecipepanel.recipe.RecipeSnapshot;
 
+import codechicken.nei.NEIClientConfig;
 import codechicken.nei.PositionedStack;
 import codechicken.nei.recipe.GuiCraftingRecipe;
 import codechicken.nei.recipe.GuiRecipeTab;
@@ -28,15 +33,49 @@ import codechicken.nei.recipe.StackInfo;
 public final class RecipeResolver {
 
     public static final RecipeResolver INSTANCE = new RecipeResolver(
-        (id, output) -> GuiCraftingRecipe.getCraftingHandlers("recipeId", output, id));
+        (id, output) -> GuiCraftingRecipe.getCraftingHandlers("recipeId", output, id),
+        NEIClientConfig::isLoaded,
+        RecipeAppearance::allSame);
     private static final int MAX_CACHED_RECIPES = 128;
     private static final int MAX_CANDIDATES = 16384;
     private static final int MAX_OUTPUT_ANCHORS = 16;
+    /** Each compared duplicate costs an offscreen render and readback; real duplicates come in pairs. */
+    static final int MAX_COMPARED_DUPLICATES = 4;
     private final Map<NBTTagCompound, Resolution> cache = new LinkedHashMap<>(16, 0.75F, true);
     private final BiFunction<Recipe.RecipeId, ItemStack, List<ICraftingHandler>> craftingLookup;
+    private final BooleanSupplier handlersLoaded;
+    private final Predicate<List<RecipeHandlerRef>> sameAppearance;
 
     RecipeResolver(BiFunction<Recipe.RecipeId, ItemStack, List<ICraftingHandler>> craftingLookup) {
+        this(craftingLookup, () -> true);
+    }
+
+    RecipeResolver(BiFunction<Recipe.RecipeId, ItemStack, List<ICraftingHandler>> craftingLookup,
+        BooleanSupplier handlersLoaded) {
+        this(craftingLookup, handlersLoaded, matches -> true);
+    }
+
+    RecipeResolver(BiFunction<Recipe.RecipeId, ItemStack, List<ICraftingHandler>> craftingLookup,
+        BooleanSupplier handlersLoaded, Predicate<List<RecipeHandlerRef>> sameAppearance) {
         this.craftingLookup = craftingLookup;
+        this.handlersLoaded = handlersLoaded;
+        this.sameAppearance = sameAppearance;
+    }
+
+    /** Whether NEI has a crafting handler for this category; usage-only handlers cannot be looked up again. */
+    public static boolean hasCraftingHandler(IRecipeHandler handler) {
+        String name = GuiRecipeTab.getHandlerInfo(PinnedRecipeHandler.unwrap(handler, 0).handler)
+            .getHandlerName();
+        for (List<? extends IRecipeHandler> handlers : Arrays
+            .asList(GuiCraftingRecipe.craftinghandlers, GuiCraftingRecipe.serialCraftingHandlers)) {
+            for (IRecipeHandler candidate : handlers) {
+                if (name.equals(
+                    GuiRecipeTab.getHandlerInfo(candidate)
+                        .getHandlerName()))
+                    return true;
+            }
+        }
+        return false;
     }
 
     public void clear() {
@@ -45,6 +84,8 @@ public final class RecipeResolver {
 
     public Resolution resolve(NBTTagCompound document) {
         if (document == null) return Resolution.failed(Status.INVALID);
+        // NEI registers plugin handlers on a background thread after the first world join; never cache that gap.
+        if (!handlersLoaded.getAsBoolean()) return Resolution.failed(Status.LOADING);
         Resolution result = cache.get(document);
         if (result != null) return result;
         result = resolveFresh(document);
@@ -59,6 +100,8 @@ public final class RecipeResolver {
     public Resolution resolveFresh(NBTTagCompound document) {
         RecipeSnapshot snapshot = RecipeSnapshot.readFromNBT(document);
         if (snapshot == null) return Resolution.failed(Status.INVALID);
+        if (!handlersLoaded.getAsBoolean()) return Resolution.failed(Status.LOADING);
+        if (snapshot.isDiagram()) return resolveDiagram(snapshot);
         try {
             Recipe.RecipeId id = Recipe.RecipeId.of(
                 new JsonParser().parse(snapshot.recipeIdJson())
@@ -70,17 +113,32 @@ public final class RecipeResolver {
                 IRecipeHandler handler = candidate.handler;
                 int index = candidate.recipeIndex;
                 List<PositionedStack> outputs = outputs(handler, index);
-                candidates.add(candidate);
-                if (matchesInputs(handler, index, id) && matchesOutputs(outputs, snapshot.outputs()))
-                    exact.add(candidate);
+                boolean inputs = matchesInputs(handler, index, id);
+                if (inputs && matchesOutputs(outputs, snapshot.outputs())) exact.add(candidate);
+                // After a pack update, keep a changed recipe only with a second signal: the same inputs or the same
+                // main result. Sharing one byproduct alone could reopen an unrelated recipe.
+                else if (inputs || producesSavedResult(outputs, snapshot, id)) candidates.add(candidate);
             }
             List<RecipeHandlerRef> matches = exact.isEmpty() ? candidates : exact;
             if (matches.isEmpty()) return Resolution.failed(Status.MISSING);
-            if (matches.size() != 1) return Resolution.failed(Status.AMBIGUOUS);
+            if (matches.size() != 1 && !identical(matches)) return Resolution.failed(Status.AMBIGUOUS);
             RecipeHandlerRef ref = matches.get(0);
             return new Resolution(new ResolvedRecipe(ref.handler, ref.recipeIndex, snapshot), Status.READY);
         } catch (RuntimeException | LinkageError e) {
             NEIRecipePanelsMod.LOG.warn("Could not resolve recipe panel", e);
+            return Resolution.failed(Status.UNSUPPORTED);
+        }
+    }
+
+    private static Resolution resolveDiagram(RecipeSnapshot snapshot) {
+        try {
+            DiagramHandlers.Match match = DiagramHandlers.resolve(snapshot);
+            if (match == null) return Resolution.failed(Status.MISSING);
+            return new Resolution(
+                new ResolvedRecipe(match.ref.handler, match.ref.recipeIndex, snapshot),
+                match.exact ? Status.READY : Status.CHOICES_ADJUSTED);
+        } catch (RuntimeException | LinkageError e) {
+            NEIRecipePanelsMod.LOG.warn("Could not resolve recipe panel diagram", e);
             return Resolution.failed(Status.UNSUPPORTED);
         }
     }
@@ -92,10 +150,12 @@ public final class RecipeResolver {
             ItemStack query = StackIdentity.queryStack(output);
             if (query != null) anchors.put(output, query);
         }
-        if (anchors.size() > MAX_OUTPUT_ANCHORS) throw new IllegalArgumentException("Too many recipe output anchors");
         Map<NBTTagCompound, List<RecipeHandlerRef>> discovered = new LinkedHashMap<>();
         int checked = 0;
+        int queries = 0;
         for (Map.Entry<NBTTagCompound, ItemStack> anchor : anchors.entrySet()) {
+            // Every candidate is still checked against the full output list; extra anchors only add lookups.
+            if (++queries > MAX_OUTPUT_ANCHORS) break;
             Map<NBTTagCompound, List<RecipeHandlerRef>> queryMatches = new LinkedHashMap<>();
             for (ICraftingHandler handler : craftingLookup.apply(id, anchor.getValue())) {
                 if (!id.getHandlerName()
@@ -125,6 +185,22 @@ public final class RecipeResolver {
         return candidates;
     }
 
+    /**
+     * Exact duplicates (common in large packs) may resolve to the first, but only when nothing a player could see
+     * differs: same stacks, chances and slot types, and the same rendered image. Handlers draw their own data (e.g.
+     * GregTech EU/t and duration), so stacks alone can't prove two recipes equivalent. Otherwise stay ambiguous.
+     */
+    private boolean identical(List<RecipeHandlerRef> matches) {
+        if (matches.size() > MAX_COMPARED_DUPLICATES) return false;
+        RecipeHandlerRef first = matches.get(0);
+        NBTTagCompound fingerprint = fingerprint(first.handler, first.recipeIndex);
+        for (int i = 1; i < matches.size(); i++) {
+            RecipeHandlerRef match = matches.get(i);
+            if (!fingerprint.equals(fingerprint(match.handler, match.recipeIndex))) return false;
+        }
+        return sameAppearance.test(matches);
+    }
+
     private static NBTTagCompound fingerprint(IRecipeHandler handler, int index) {
         NBTTagCompound tag = new NBTTagCompound();
         tag.setString("handler", handler.getHandlerId());
@@ -142,6 +218,11 @@ public final class RecipeResolver {
             NBTTagCompound slot = new NBTTagCompound();
             slot.setInteger("x", stack.relx);
             slot.setInteger("y", stack.rely);
+            slot.setInteger("chance", stack.getChance());
+            slot.setString(
+                "type",
+                stack.getClass()
+                    .getName());
             NBTTagList items = new NBTTagList();
             for (ItemStack item : stack.items) {
                 NBTTagCompound data = StackInfo.itemStackToNBT(item);
@@ -168,6 +249,19 @@ public final class RecipeResolver {
             } else choices.add(new RecipeSnapshot.Selection(0, 0, identity));
         }
         return id.isShapedRecipe() || allMatched(ChoiceMatcher.match(choices, optionSlots(slots)));
+    }
+
+    private static boolean producesSavedResult(List<PositionedStack> outputs, RecipeSnapshot snapshot,
+        Recipe.RecipeId id) {
+        if (snapshot.result() != null) return accepts(outputs, StackIdentity.of(id.getResult()));
+        // Without a result slot, NEI's result is only the first output, possibly a byproduct: require two of the
+        // saved outputs (or the only one), each in its own live slot.
+        List<NBTTagCompound> saved = snapshot.outputs();
+        List<RecipeSnapshot.Selection> choices = new ArrayList<>();
+        for (NBTTagCompound identity : saved) choices.add(new RecipeSnapshot.Selection(0, 0, identity));
+        int matched = 0;
+        for (int owner : ChoiceMatcher.match(choices, optionSlots(outputs))) if (owner >= 0) matched++;
+        return matched >= Math.min(2, saved.size());
     }
 
     private static boolean matchesOutputs(List<PositionedStack> outputs, List<NBTTagCompound> identities) {
@@ -212,7 +306,8 @@ public final class RecipeResolver {
         MISSING,
         AMBIGUOUS,
         INVALID,
-        UNSUPPORTED;
+        UNSUPPORTED,
+        LOADING;
 
         public String translationKey() {
             return "nei-recipe-panels.recipe." + name().toLowerCase(java.util.Locale.ROOT);

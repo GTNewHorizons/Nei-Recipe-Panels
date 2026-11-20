@@ -18,7 +18,9 @@ public class RecipePanelItemRenderer implements IItemRenderer {
 
     @Override
     public boolean handleRenderType(ItemStack item, ItemRenderType type) {
-        return type == ItemRenderType.INVENTORY && GuiScreen.isShiftKeyDown()
+        // Inventory type also covers the hotbar; only swap icons inside GUIs so sneaking doesn't.
+        return type == ItemRenderType.INVENTORY && Minecraft.getMinecraft().currentScreen != null
+            && GuiScreen.isShiftKeyDown()
             && ItemRecipePanel.getResult(item) != null;
     }
 

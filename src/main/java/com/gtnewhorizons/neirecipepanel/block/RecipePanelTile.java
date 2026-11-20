@@ -17,9 +17,19 @@ public class RecipePanelTile extends TileEntity {
     private NBTTagCompound snapshot;
     private NBTTagCompound settings;
     private long contentVersion;
+    private boolean dropSuppressed;
 
     public boolean hasSnapshot() {
         return snapshot != null;
+    }
+
+    /** Creative breaking, like vanilla, yields nothing. */
+    public void suppressDrop() {
+        dropSuppressed = true;
+    }
+
+    public boolean isDropSuppressed() {
+        return dropSuppressed;
     }
 
     public long contentVersion() {

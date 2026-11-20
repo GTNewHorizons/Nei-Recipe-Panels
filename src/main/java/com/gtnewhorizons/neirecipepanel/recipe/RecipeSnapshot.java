@@ -19,14 +19,19 @@ public final class RecipeSnapshot {
     public static final int VERSION = 1;
     public static final int MAX_SLOTS = 256;
     private static final int MAX_RECIPE_ID = 12000;
+    /** Diagram documents (NEI Custom Diagram) name a group, some shown components and a hash of all of them. */
+    public static final String KIND_DIAGRAM = "diagram";
+    public static final int MAX_DIAGRAM_ANCHORS = 16;
 
     private final NBTTagCompound document;
     private final List<Selection> ingredients;
     private final List<Selection> others;
     private final Selection result;
+    private final List<Selection> anchors;
 
     private RecipeSnapshot(NBTTagCompound document) {
         this.document = (NBTTagCompound) document.copy();
+        anchors = readSelections(document, "anchors");
         ingredients = readSelections(document, "inputs");
         others = readSelections(document, "other");
         result = document.hasKey("result", 10) ? Selection.read(document.getCompoundTag("result")) : null;
@@ -47,7 +52,18 @@ public final class RecipeSnapshot {
         return readFromNBT(tag);
     }
 
+    public static RecipeSnapshot createDiagram(String handlerId, List<Selection> anchors, int contentHash) {
+        NBTTagCompound tag = new NBTTagCompound();
+        tag.setInteger("ver", VERSION);
+        tag.setString("kind", KIND_DIAGRAM);
+        tag.setString("handlerId", handlerId);
+        tag.setTag("anchors", writeSelections(anchors));
+        tag.setInteger("hash", contentHash);
+        return readFromNBT(tag);
+    }
+
     public static RecipeSnapshot readFromNBT(NBTTagCompound tag) {
+        if (tag != null && KIND_DIAGRAM.equals(tag.getString("kind"))) return readDiagram(tag);
         if (tag == null || !tag.hasKey("ver", 3) || !tag.hasKey("recipeId", 8)) return null;
         if (tag.getInteger("ver") != VERSION || !validRecipeId(tag.getString("recipeId"))) return null;
         if (!BoundedNbt.isWithinLimit(tag, BoundedNbt.MAX_BYTES)) return null;
@@ -64,8 +80,28 @@ public final class RecipeSnapshot {
         return new RecipeSnapshot(tag);
     }
 
+    private static RecipeSnapshot readDiagram(NBTTagCompound tag) {
+        if (!tag.hasKey("ver", 3) || tag.getInteger("ver") != VERSION || !tag.hasKey("hash", 3)) return null;
+        if (!BoundedNbt.isWithinLimit(tag, BoundedNbt.MAX_BYTES)) return null;
+        if (!tag.hasKey("handlerId", 8) || tag.getString("handlerId")
+            .isEmpty()
+            || tag.getString("handlerId")
+                .length() > 256
+            || !validSelections(tag, "anchors", MAX_DIAGRAM_ANCHORS)
+            || tag.getTagList("anchors", 10)
+                .tagCount() == 0)
+            return null;
+        return new RecipeSnapshot(tag);
+    }
+
     public static NBTTagCompound sanitize(NBTTagCompound raw, int maxSlots, int maxBytes) {
         if (raw == null || raw.getInteger("ver") != VERSION) return null;
+        if (KIND_DIAGRAM.equals(raw.getString("kind"))) {
+            if (!BoundedNbt.isWithinLimit(raw, Math.min(maxBytes, BoundedNbt.MAX_BYTES))) return null;
+            RecipeSnapshot diagram = readFromNBT(raw);
+            return diagram == null ? null
+                : createDiagram(diagram.handlerId(), diagram.anchors, diagram.diagramHash()).writeToNBT();
+        }
         if (!validSelections(raw, "inputs", maxSlots) || !validSelections(raw, "other", maxSlots)) return null;
         if (!BoundedNbt.isWithinLimit(raw, Math.min(maxBytes, BoundedNbt.MAX_BYTES))) return null;
         RecipeSnapshot snapshot = readFromNBT(raw);
@@ -77,6 +113,19 @@ public final class RecipeSnapshot {
             snapshot.result,
             snapshot.others,
             snapshot.outputs()).writeToNBT();
+    }
+
+    public boolean isDiagram() {
+        return KIND_DIAGRAM.equals(document.getString("kind"));
+    }
+
+    /** Components shown in a diagram document, used to look the diagram up again; empty for recipes. */
+    public List<Selection> diagramAnchors() {
+        return anchors;
+    }
+
+    public int diagramHash() {
+        return document.getInteger("hash");
     }
 
     public String recipeIdJson() {

@@ -20,19 +20,20 @@ final class StackIdentity {
         return StackInfo.loadFromNBT(query, 1);
     }
 
+    static NBTTagCompound of(FluidStack fluid) {
+        if (fluid == null || fluid.getFluid() == null) return null;
+        NBTTagCompound identity = new NBTTagCompound();
+        identity.setString(
+            "fluid",
+            fluid.getFluid()
+                .getName());
+        if (fluid.tag != null) identity.setTag("tag", fluid.tag.copy());
+        return identity;
+    }
+
     static NBTTagCompound of(ItemStack stack) {
         if (stack == null || stack.getItem() == null) return null;
-        if (StackInfo.isFluidDisplayItem(stack)) {
-            FluidStack fluid = StackInfo.getFluid(stack);
-            if (fluid == null) return null;
-            NBTTagCompound identity = new NBTTagCompound();
-            identity.setString(
-                "fluid",
-                fluid.getFluid()
-                    .getName());
-            if (fluid.tag != null) identity.setTag("tag", fluid.tag.copy());
-            return identity;
-        }
+        if (StackInfo.isFluidDisplayItem(stack)) return of(StackInfo.getFluid(stack));
         NBTTagCompound identity = StackInfo.itemStackToNBT(stack, false);
         if (identity != null) {
             identity = (NBTTagCompound) identity.copy();

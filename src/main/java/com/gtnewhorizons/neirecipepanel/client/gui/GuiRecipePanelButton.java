@@ -4,15 +4,20 @@ import java.util.List;
 import java.util.Map;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.StatCollector;
+
+import org.lwjgl.opengl.GL11;
 
 import com.gtnewhorizons.neirecipepanel.ModItems;
 import com.gtnewhorizons.neirecipepanel.NEIRecipePanelsMod;
 import com.gtnewhorizons.neirecipepanel.client.recipe.RecipeCapture;
 import com.gtnewhorizons.neirecipepanel.client.recipe.RecipeResolver;
+import com.gtnewhorizons.neirecipepanel.config.PanelConfig;
 import com.gtnewhorizons.neirecipepanel.network.MakeRecipePanelMessage;
 import com.gtnewhorizons.neirecipepanel.recipe.RecipeSnapshot;
 
@@ -23,17 +28,51 @@ import codechicken.nei.recipe.RecipeHandlerRef;
 public class GuiRecipePanelButton extends GuiRecipeButton {
 
     private static final int BUTTON_ID = 44251001;
+    private static final ResourceLocation ICON = new ResourceLocation(
+        NEIRecipePanelsMod.MODID,
+        "textures/gui/imprint_button.png");
+    private static final int ICON_SIZE = 8;
     private Boolean supported;
 
     public GuiRecipePanelButton(RecipeHandlerRef handlerRef, int x, int y) {
-        super(handlerRef, x, y, BUTTON_ID, "P");
+        super(handlerRef, x, y, BUTTON_ID, "");
     }
 
     @Override
     public void update() {
         super.update();
-        if (supported == null) supported = RecipeCapture.capture(handlerRef.handler, handlerRef.recipeIndex) != null;
-        this.enabled = supported && hasBlueprint(Minecraft.getMinecraft().thePlayer);
+        if (supported == null) supported = RecipeCapture.capture(handlerRef.handler, handlerRef.recipeIndex) != null
+            && RecipeResolver.hasCraftingHandler(handlerRef.handler);
+        boolean canImprint = canImprint(Minecraft.getMinecraft().thePlayer);
+        this.enabled = supported && canImprint;
+        this.visible = canImprint || !PanelConfig.Client.buttonRequiresBlueprint;
+    }
+
+    @Override
+    public boolean contains(int mouseX, int mouseY) {
+        return this.visible && super.contains(mouseX, mouseY);
+    }
+
+    /** The 16x16 icon drawn at 8x8, tinted with NEI's button label colour so hover / disabled / themes apply. */
+    @Override
+    protected void drawContent(Minecraft minecraft, int mouseX, int mouseY, boolean mouseOver) {
+        int color = getTextColour(mouseOver);
+        int left = this.xPosition + (this.width - ICON_SIZE) / 2;
+        int top = this.yPosition + (this.height - ICON_SIZE) / 2;
+        minecraft.getTextureManager()
+            .bindTexture(ICON);
+        GL11.glEnable(GL11.GL_BLEND);
+        GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+        GL11.glColor4f((color >> 16 & 0xFF) / 255F, (color >> 8 & 0xFF) / 255F, (color & 0xFF) / 255F, 1);
+        Tessellator tessellator = Tessellator.instance;
+        tessellator.startDrawingQuads();
+        tessellator.addVertexWithUV(left, top + ICON_SIZE, zLevel, 0, 1);
+        tessellator.addVertexWithUV(left + ICON_SIZE, top + ICON_SIZE, zLevel, 1, 1);
+        tessellator.addVertexWithUV(left + ICON_SIZE, top, zLevel, 1, 0);
+        tessellator.addVertexWithUV(left, top, zLevel, 0, 0);
+        tessellator.draw();
+        GL11.glDisable(GL11.GL_BLEND);
+        GL11.glColor4f(1, 1, 1, 1);
     }
 
     @Override
@@ -75,9 +114,18 @@ public class GuiRecipePanelButton extends GuiRecipeButton {
     @Override
     public void drawItemOverlay() {}
 
-    private static boolean hasBlueprint(EntityPlayer player) {
+    private static boolean canImprint(EntityPlayer player) {
         if (player == null) {
             return false;
+        }
+        // Server settings are synced to the client by GTNHLib; OP_ONLY is still checked by the server.
+        boolean creative = player.capabilities.isCreativeMode;
+        PanelConfig.PanelMode mode = PanelConfig.Server.panelMode;
+        if (mode == PanelConfig.PanelMode.DISABLED || mode == PanelConfig.PanelMode.CREATIVE_ONLY && !creative) {
+            return false;
+        }
+        if (creative && !PanelConfig.Server.consumeInCreative) {
+            return true;
         }
         if (isBlueprint(player.inventory.getItemStack())) {
             return true;

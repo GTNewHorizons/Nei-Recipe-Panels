@@ -4,7 +4,7 @@ import net.minecraft.init.Items;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 
-import com.gtnewhorizons.neirecipepanel.config.Config;
+import com.gtnewhorizons.neirecipepanel.config.PanelConfig;
 import com.gtnewhorizons.neirecipepanel.item.ItemRecipeBlueprint;
 import com.gtnewhorizons.neirecipepanel.item.ItemRecipePanel;
 
@@ -26,7 +26,7 @@ public final class ModItems {
     }
 
     public static void registerRecipes() {
-        if (Config.registerBlueprintRecipe) {
+        if (PanelConfig.Recipe.registerBlueprintRecipe) {
             GameRegistry.addShapelessRecipe(new ItemStack(recipeBlueprint), Items.paper, Items.paper, Items.redstone);
             // Wipe an imprinted panel back to a blank blueprint (NBT is ignored by shapeless matching).
             GameRegistry.addShapelessRecipe(new ItemStack(recipeBlueprint), new ItemStack(recipePanel));

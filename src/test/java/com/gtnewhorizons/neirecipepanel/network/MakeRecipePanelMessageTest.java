@@ -14,7 +14,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import com.google.common.io.ByteStreams;
-import com.gtnewhorizons.neirecipepanel.config.Config;
+import com.gtnewhorizons.neirecipepanel.config.PanelConfig;
 import com.gtnewhorizons.neirecipepanel.recipe.RecipeSnapshot;
 
 import io.netty.buffer.ByteBuf;
@@ -22,13 +22,13 @@ import io.netty.buffer.Unpooled;
 
 class MakeRecipePanelMessageTest {
 
-    private final int originalSlots = Config.maxIngredients;
-    private final int originalBytes = Config.maxSnapshotBytes;
+    private final int originalSlots = PanelConfig.Server.maxIngredients;
+    private final int originalBytes = PanelConfig.Server.maxSnapshotBytes;
 
     @AfterEach
     void restoreLimits() {
-        Config.maxIngredients = originalSlots;
-        Config.maxSnapshotBytes = originalBytes;
+        PanelConfig.Server.maxIngredients = originalSlots;
+        PanelConfig.Server.maxSnapshotBytes = originalBytes;
     }
 
     @Test
@@ -49,14 +49,14 @@ class MakeRecipePanelMessageTest {
 
     @Test
     void explicitLowerSlotLimitsStillRejectAnExtremeRecipe() throws Exception {
-        Config.maxIngredients = 64;
+        PanelConfig.Server.maxIngredients = 64;
 
         assertNull(decode(extremeRecipe()));
     }
 
     @Test
     void configuredByteLimitsRemainEnforced() throws Exception {
-        Config.maxSnapshotBytes = 512;
+        PanelConfig.Server.maxSnapshotBytes = 512;
 
         assertNull(decode(extremeRecipe()));
     }

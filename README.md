@@ -5,8 +5,10 @@ and GT New Horizons. Display recipes as panels, including items, fluids,
 and your selected ingredient alternatives.
 
 1. Craft a **Recipe Blueprint**.
-2. Open a recipe in NEI, choose your preferred alternatives, and click the **P** button
-   to imprint it, consuming the blueprint.
+2. Open a recipe in NEI, choose your preferred alternatives, and click the panel button
+   next to the favourite / overlay buttons to imprint it, consuming the blueprint. The
+   button only shows while you carry a blueprint (or are in creative). NEI Custom Diagram
+   pages, such as GregTech ore processing, are supported too.
 3. Place the resulting **Recipe Panel** against a solid block face.
 
 - **Right-click** a panel to reopen its recipe in NEI.
@@ -18,6 +20,20 @@ and your selected ingredient alternatives.
 After pack updates, panels show the current recipe and keep your selected items when
 possible. If a recipe is missing or cannot be matched uniquely, the panel shows a notice;
 re-imprint it to choose a replacement.
+
+## Config
+
+`config/nei-recipe-panels.cfg`, also editable in-game from the mod list (GTNHLib).
+
+- `recipe.registerBlueprintRecipe` (default true): built-in blueprint recipe; needs a restart.
+- `server.panelMode` (default EVERYONE): who may imprint (DISABLED, CREATIVE_ONLY, OP_ONLY,
+  EVERYONE). Synced to clients.
+- `server.consumeInCreative` (default false): creative imprints spend a blueprint. Synced.
+- `server.maxIngredients`, `server.maxSnapshotBytes`: limits on imprinted recipe data.
+- `client.textureBudgetMB` (default 128): video memory for cached panel images; panels
+  beyond it show a capacity notice.
+- `client.supersample` (default 2): panel image resolution; lower fits more panels.
+- `client.buttonRequiresBlueprint` (default true): set false to always show the NEI button.
 
 ## License
 

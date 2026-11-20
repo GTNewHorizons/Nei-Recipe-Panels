@@ -5,7 +5,7 @@ import java.util.List;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 
-import com.gtnewhorizons.neirecipepanel.config.Config;
+import com.gtnewhorizons.neirecipepanel.config.PanelConfig;
 import com.gtnewhorizons.neirecipepanel.network.ConfigurePanelMessage;
 import com.gtnewhorizons.neirecipepanel.network.MakeRecipePanelMessage;
 import com.gtnewhorizons.neirecipepanel.network.ServerTasks;
@@ -20,7 +20,7 @@ import cpw.mods.fml.relauncher.Side;
 public class CommonProxy {
 
     public void preInit(FMLPreInitializationEvent event) {
-        Config.synchronizeConfiguration(event.getSuggestedConfigurationFile());
+        PanelConfig.register();
         ModItems.register();
         ModBlocks.register();
         NEIRecipePanelsMod.NETWORK

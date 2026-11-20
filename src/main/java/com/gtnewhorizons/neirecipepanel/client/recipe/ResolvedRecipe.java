@@ -13,6 +13,7 @@ import com.gtnewhorizons.neirecipepanel.recipe.RecipeSnapshot;
 import codechicken.nei.PositionedStack;
 import codechicken.nei.recipe.FurnaceRecipeHandler;
 import codechicken.nei.recipe.IRecipeHandler;
+import codechicken.nei.recipe.RecipeHandlerRef;
 
 public final class ResolvedRecipe {
 
@@ -31,12 +32,21 @@ public final class ResolvedRecipe {
         refresh();
     }
 
+    /** The recipe exactly as NEI currently shows it, without a saved-document lookup; null if it can't be captured. */
+    public static ResolvedRecipe live(IRecipeHandler handler, int index) {
+        RecipeHandlerRef source = PinnedRecipeHandler.unwrap(handler, index);
+        RecipeSnapshot snapshot = RecipeCapture.capture(source.handler, source.recipeIndex);
+        return snapshot == null ? null : new ResolvedRecipe(source.handler, source.recipeIndex, snapshot);
+    }
+
     public IRecipeHandler pinnedHandler() {
         return new PinnedRecipeHandler(this);
     }
 
     public void refresh() {
         choicesAdjusted = false;
+        // Diagrams draw their own components; there are no NEI stacks to reconcile.
+        if (snapshot.isDiagram()) return;
         inputs = reconcile(handler.getIngredientStacks(index), snapshot.ingredients());
         List<PositionedStack> otherStacks = handler.getOtherStacks(index);
         if (handler instanceof FurnaceRecipeHandler && FurnaceRecipeHandler.afuels != null
@@ -97,6 +107,13 @@ public final class ResolvedRecipe {
     }
 
     public ItemStack displayResult() {
+        if (snapshot.isDiagram()) {
+            List<RecipeSnapshot.Selection> anchors = snapshot.diagramAnchors();
+            return anchors.isEmpty() ? null
+                : StackIdentity.queryStack(
+                    anchors.get(0)
+                        .identity());
+        }
         for (PositionedStack output : outputs()) if (output.item != null) return output.item.copy();
         return null;
     }

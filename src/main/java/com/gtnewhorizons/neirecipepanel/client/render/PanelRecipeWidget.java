@@ -11,6 +11,7 @@ import net.minecraft.client.gui.GuiScreen;
 
 import org.lwjgl.opengl.GL11;
 
+import com.gtnewhorizons.neirecipepanel.client.recipe.DiagramHandlers;
 import com.gtnewhorizons.neirecipepanel.client.recipe.ResolvedRecipe;
 
 import codechicken.nei.PositionedStack;
@@ -84,7 +85,7 @@ final class PanelRecipeWidget extends RecipeWidget {
         screen.configure(mc);
         int depth = contextDepth();
         mc.currentScreen = screen;
-        try {
+        try (ProgressFreeze ignored = new ProgressFreeze(recipe.handler)) {
             GL11.glColor4f(1, 1, 1, 1);
             super.draw(mouseX, mouseY);
         } finally {
@@ -183,7 +184,8 @@ final class PanelRecipeWidget extends RecipeWidget {
 
         private void configure(Minecraft mc) {
             guiLeft = x;
-            guiTop = y + getHandlerInfo().getYShift();
+            guiTop = y + PanelRecipeWidget.this.getHandlerInfo()
+                .getYShift();
             setWorldAndResolution(mc, 2 * guiLeft + 176, 2 * guiTop + 166);
         }
 
@@ -211,9 +213,14 @@ final class PanelRecipeWidget extends RecipeWidget {
             return Collections.singletonList(recipe.index);
         }
 
+        /**
+         * Diagram groups only use this to find the hovered component from the real mouse; keep it off-canvas so no
+         * hover
+         * highlight is baked into the image.
+         */
         @Override
         public Point getRecipePosition(int index) {
-            return new Point(0, 0);
+            return DiagramHandlers.isDiagram(recipe.handler) ? new Point(-10000, -10000) : new Point(0, 0);
         }
 
         @Override

@@ -22,6 +22,7 @@ public final class RecipeCapture {
             RecipeHandlerRef source = PinnedRecipeHandler.unwrap(handler, index);
             handler = source.handler;
             index = source.recipeIndex;
+            if (DiagramHandlers.isDiagram(handler)) return DiagramHandlers.capture(handler, index);
             Recipe.RecipeId id = Recipe.RecipeId.of(handler, index);
             if (id == null || id.getResult() == null) return null;
             PositionedStack result = handler.getResultStack(index);

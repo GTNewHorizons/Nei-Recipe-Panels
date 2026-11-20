@@ -22,10 +22,10 @@ import com.gtnewhorizons.neirecipepanel.NEIRecipePanelsMod;
 import com.gtnewhorizons.neirecipepanel.block.RecipePanelTile;
 import com.gtnewhorizons.neirecipepanel.client.recipe.RecipeResolver;
 import com.gtnewhorizons.neirecipepanel.client.recipe.ResolvedRecipe;
+import com.gtnewhorizons.neirecipepanel.config.PanelConfig;
 import com.gtnewhorizons.neirecipepanel.config.PanelSettings;
 
 import codechicken.nei.PositionedStack;
-import codechicken.nei.recipe.GuiRecipeTab;
 import codechicken.nei.recipe.HandlerInfo;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
@@ -34,7 +34,6 @@ public final class PanelFboManager {
 
     public static final PanelFboManager INSTANCE = new PanelFboManager();
     private static final int MAX_PANELS = 128;
-    private static final long MAX_TEXTURE_BYTES = 96L * 1024 * 1024;
     private static final long FRAME_BUDGET_NS = 2_000_000;
     private static final long EVICT_AFTER_NS = 10_000_000_000L;
     private static final double ANIMATION_DISTANCE_SQUARED = 3 * 3;
@@ -44,16 +43,22 @@ public final class PanelFboManager {
     private World world;
     private long frame;
     private long clientTick;
+    private int supersample = PanelTexture.supersample();
 
     private PanelFboManager() {}
 
     public void reload() {
-        PanelDrawBatch.INSTANCE.reload();
+        PanelCamera.INSTANCE.reload();
         if (panels.values()
             .stream()
             .anyMatch(panel -> panel.bytes() > 0)) {
             try (RenderState ignored = new RenderState()) {
                 for (Panel panel : panels.values()) panel.dispose();
+            }
+        }
+        if (PanelScratch.bytes() > 0) {
+            try (RenderState ignored = new RenderState()) {
+                PanelScratch.dispose();
             }
         }
         panels.clear();
@@ -64,19 +69,27 @@ public final class PanelFboManager {
     public Panel visible(RecipePanelTile tile) {
         if (!tile.hasSnapshot()) return unavailable;
         Binding binding = bindings.get(tile);
+        boolean current = binding != null && binding.contentVersion == tile.contentVersion();
         Panel panel;
-        if (binding != null && binding.contentVersion == tile.contentVersion() && !binding.panel.evicted) {
+        if (current && binding.panel != unavailable && !binding.panel.evicted) {
             panel = binding.panel;
         } else {
-            NBTTagCompound snapshot = tile.getSnapshot();
-            Key key = new Key(snapshot, tile.getSettings());
+            // Over capacity, the tile keeps its key so it can join an identical panel, or retry once a slot frees,
+            // without copying the snapshot every frame.
+            Key key = current && binding.panel == unavailable ? binding.key
+                : new Key(tile.getSnapshot(), tile.getSettings());
             panel = panels.get(key);
             if (panel == null) {
-                if (panels.size() >= MAX_PANELS) return unavailable;
-                panel = new Panel(snapshot, key.settings);
+                if (panels.size() >= MAX_PANELS) {
+                    if (!current || binding.panel != unavailable) {
+                        bindings.put(tile, new Binding(tile.contentVersion(), unavailable, key));
+                    }
+                    return unavailable;
+                }
+                panel = new Panel(key.snapshot, key.settings);
                 panels.put(key, panel);
             }
-            bindings.put(tile, new Binding(tile.contentVersion(), panel));
+            bindings.put(tile, new Binding(tile.contentVersion(), panel, key));
         }
         panel.lastSeen = System.nanoTime();
         panel.lastSeenFrame = frame;
@@ -117,7 +130,13 @@ public final class PanelFboManager {
 
     @SubscribeEvent
     public void onRenderTick(TickEvent.RenderTickEvent event) {
-        if (event.phase != TickEvent.Phase.START || panels.isEmpty()) return;
+        if (event.phase != TickEvent.Phase.START) return;
+        // Changed from the in-game config screen: cached images are at the old resolution.
+        if (supersample != PanelTexture.supersample()) {
+            supersample = PanelTexture.supersample();
+            reload();
+        }
+        if (panels.isEmpty()) return;
         frame++;
         long start = System.nanoTime();
         List<Panel> dispose = null;
@@ -136,8 +155,12 @@ public final class PanelFboManager {
                 dispose.add(panel);
             }
         }
+        if (!framebuffersEnabled && PanelScratch.bytes() > 0) {
+            if (dispose == null) dispose = new ArrayList<>();
+        }
         if (dispose != null) {
             try (RenderState ignored = new RenderState()) {
+                if (!framebuffersEnabled) PanelScratch.dispose();
                 for (Panel panel : dispose) {
                     if (panel.evicted || panel.renderFailed || !framebuffersEnabled) panel.dispose();
                     else panel.disposeAnimation();
@@ -145,6 +168,7 @@ public final class PanelFboManager {
             }
         }
         if (!framebuffersEnabled) return;
+        long budget = PanelConfig.Client.textureBudgetMB * 1024L * 1024L;
         long memory = 0;
         for (Panel panel : panels.values()) memory += panel.bytes();
         for (Panel panel : panels.values()) {
@@ -152,7 +176,7 @@ public final class PanelFboManager {
             if (panel.ready()) {
                 if (!panel.animationRequested(frame) || panel.lastAnimationTick == clientTick) continue;
                 long additionalBytes = 2 * PanelTexture.estimatedBytes(panel.width) - panel.animationBytes();
-                if (memory + additionalBytes > MAX_TEXTURE_BYTES) continue;
+                if (memory + additionalBytes > budget) continue;
                 long previousBytes = panel.bytes();
                 panel.animate(clientTick);
                 memory += panel.bytes() - previousBytes;
@@ -161,14 +185,13 @@ public final class PanelFboManager {
             }
             long previousBytes = panel.bytes();
             panel.capacityLimited = false;
-            if (memory >= MAX_TEXTURE_BYTES && previousBytes == 0) {
+            if (memory >= budget && previousBytes == 0) {
                 panel.capacityLimited = true;
                 continue;
             }
-            panel.prepare();
-            if (panel.renderFailed) continue;
+            if (!panel.prepare() || panel.renderFailed) continue;
             long requiredBytes = PanelTexture.estimatedBytes(panel.width);
-            if (memory - previousBytes + requiredBytes > MAX_TEXTURE_BYTES) {
+            if (memory - previousBytes + requiredBytes > budget) {
                 panel.capacityLimited = true;
                 continue;
             }
@@ -182,12 +205,14 @@ public final class PanelFboManager {
 
         private final long contentVersion;
         private final Panel panel;
+        private final Key key;
         private long visibilityTick = -1;
         private boolean unobstructed;
 
-        private Binding(long contentVersion, Panel panel) {
+        private Binding(long contentVersion, Panel panel, Key key) {
             this.contentVersion = contentVersion;
             this.panel = panel;
+            this.key = key;
         }
     }
 
@@ -217,6 +242,11 @@ public final class PanelFboManager {
 
     public static final class Panel {
 
+        private static final int MAX_SIDE = 512;
+        private static final int TITLE_HEIGHT = 14;
+        private static final int MEASURE_SIDE = 512;
+        private static final int MEASURE_PADDING = 64;
+
         private final NBTTagCompound snapshot;
         private final PanelSettings settings;
         private final PanelTexture texture = new PanelTexture();
@@ -236,6 +266,8 @@ public final class PanelFboManager {
         private int originX;
         private int originY;
         private int yShift;
+        private boolean measured;
+        private int[] drawn;
         int width = 176;
         int height = 176;
 
@@ -304,41 +336,82 @@ public final class PanelFboManager {
             return null;
         }
 
-        private void prepare() {
+        /** Returns false while the panel cannot be drawn yet (NEI still loading) or has failed. */
+        private boolean prepare() {
             try {
                 if (resolution == null) {
-                    resolution = RecipeResolver.INSTANCE.resolve(snapshot);
+                    RecipeResolver.Resolution resolved = RecipeResolver.INSTANCE.resolve(snapshot);
+                    if (resolved.status() == RecipeResolver.Status.LOADING) return false;
+                    resolution = resolved;
                     recipe = resolution.recipe();
                     if (recipe != null) widget = new PanelRecipeWidget(recipe);
                 }
-                if (recipe == null) return;
+                if (recipe == null) return true;
                 recipe.refresh();
+                // GregTech loads its resource-pack (.mcmeta) NEI text colour lazily in getRecipeName(); call it
+                // before anything draws, as NEI's screen does.
                 recipe.name();
-                HandlerInfo info = GuiRecipeTab.getHandlerInfo(recipe.handler);
-                yShift = info.getYShift();
-                int minX = 0;
-                int minY = Math.min(0, yShift);
-                int maxX = Math.max(166, info.getWidth());
-                int recipeHeight = recipe.handler.getRecipeHeight(recipe.index);
-                int maxY = (recipeHeight > 0 ? recipeHeight : info.getHeight()) + Math.max(0, yShift);
-                for (PositionedStack stack : recipe.allStacks()) {
-                    minX = Math.min(minX, stack.relx);
-                    minY = Math.min(minY, stack.rely + yShift);
-                    maxX = Math.max(maxX, stack.relx + stack.width);
-                    maxY = Math.max(maxY, stack.rely + yShift + stack.height);
-                }
-                int bodyWidth = maxX - minX;
-                int bodyHeight = maxY - minY;
-                int side = Math.max(176, Math.max(bodyWidth + 24, bodyHeight + 38));
-                if (side > 512 || bodyWidth <= 0 || bodyHeight <= 0)
-                    throw new IllegalArgumentException("Recipe exceeds panel layout limits");
-                width = height = side;
-                originX = (side - bodyWidth) / 2 - minX;
-                originY = 14 + (side - 14 - bodyHeight) / 2 - minY;
-                widget.setLocation(originX, originY);
+                layout();
+                return true;
             } catch (RuntimeException | LinkageError e) {
                 fail(e);
+                return false;
             }
+        }
+
+        private void layout() {
+            HandlerInfo info = widget.getHandlerInfo();
+            yShift = info.getYShift();
+            int minX = 0;
+            int minY = Math.min(0, yShift);
+            int maxX = Math.max(166, info.getWidth());
+            int recipeHeight = recipe.handler.getRecipeHeight(recipe.index);
+            int maxY = (recipeHeight > 0 ? recipeHeight : info.getHeight()) + Math.max(0, yShift);
+            for (PositionedStack stack : recipe.allStacks()) {
+                minX = Math.min(minX, stack.relx);
+                minY = Math.min(minY, stack.rely + yShift);
+                maxX = Math.max(maxX, stack.relx + stack.width);
+                maxY = Math.max(maxY, stack.rely + yShift + stack.height);
+            }
+            if (!measured) {
+                measured = true;
+                drawn = measureDrawnArea();
+            }
+            // Handlers (e.g. GregTech descriptions) may draw past their declared height.
+            if (drawn != null) {
+                int unionMinX = Math.min(minX, drawn[0]);
+                int unionMinY = Math.min(minY, drawn[1]);
+                int unionMaxX = Math.max(maxX, drawn[2]);
+                int unionMaxY = Math.max(maxY, drawn[3]);
+                if (side(unionMaxX - unionMinX, unionMaxY - unionMinY) <= MAX_SIDE) {
+                    minX = unionMinX;
+                    minY = unionMinY;
+                    maxX = unionMaxX;
+                    maxY = unionMaxY;
+                }
+            }
+            int bodyWidth = maxX - minX;
+            int bodyHeight = maxY - minY;
+            int side = side(bodyWidth, bodyHeight);
+            if (side > MAX_SIDE || bodyWidth <= 0 || bodyHeight <= 0)
+                throw new IllegalArgumentException("Recipe exceeds panel layout limits");
+            width = height = side;
+            originX = (side - bodyWidth) / 2 - minX;
+            originY = TITLE_HEIGHT + (side - TITLE_HEIGHT - bodyHeight) / 2 - minY;
+            widget.setLocation(originX, originY);
+        }
+
+        private static int side(int bodyWidth, int bodyHeight) {
+            return Math.max(176, Math.max(bodyWidth + 24, bodyHeight + TITLE_HEIGHT + 24));
+        }
+
+        /** Body-relative bounds of what the handler actually draws, or null if unavailable. */
+        private int[] measureDrawnArea() {
+            widget.setLocation(MEASURE_PADDING, MEASURE_PADDING);
+            int[] area = PanelTexture.measure(MEASURE_SIDE, widget::drawBackground);
+            if (area == null) return null;
+            for (int i = 0; i < area.length; i++) area[i] -= MEASURE_PADDING;
+            return area;
         }
 
         private void render() {
@@ -379,20 +452,20 @@ public final class PanelFboManager {
         private void draw(boolean backgroundOnly) {
             Minecraft mc = Minecraft.getMinecraft();
             if (!settings.transparent) PanelBackdrop.draw(width, height);
-            String title = settings.customName.isEmpty() ? recipe == null ? "" : recipe.handler.getRecipeTabName()
+            String title = settings.customName.isEmpty() ? recipe == null ? ""
+                // Tab name, not getRecipeName(): GregTech appends a voltage tier to that once it has drawn.
+                : recipe.handler.getRecipeTabName()
+                    .trim()
                 : settings.customName;
+            int color = settings.transparent ? 0xFFFFFF : PanelBackdrop.textColor();
             FontRenderer font = mc.fontRenderer;
             title = font.trimStringToWidth(title, width - 16);
-            font.drawString(
-                title,
-                (width - font.getStringWidth(title)) / 2,
-                5,
-                settings.transparent ? 0xFFFFFF : 0x404040);
+            font.drawString(title, (width - font.getStringWidth(title)) / 2, 5, color);
             if (widget != null) {
                 if (backgroundOnly) widget.drawBackground();
                 else widget.draw(-10000, -10000);
             } else {
-                PanelStatusText.draw(font, statusKey(), width, height, settings.transparent ? 0xFFFFFF : 0x404040);
+                PanelStatusText.draw(font, statusKey(), width, height, color);
             }
             finishImage();
         }
