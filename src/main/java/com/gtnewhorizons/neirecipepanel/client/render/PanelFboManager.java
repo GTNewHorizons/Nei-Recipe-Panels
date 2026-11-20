@@ -70,24 +70,26 @@ public final class PanelFboManager {
         if (!tile.hasSnapshot()) return unavailable;
         Binding binding = bindings.get(tile);
         boolean current = binding != null && binding.contentVersion == tile.contentVersion();
-        // Over capacity: retry only once a slot frees, without copying the snapshot every frame.
-        if (current && binding.panel == unavailable && panels.size() >= MAX_PANELS) return unavailable;
         Panel panel;
         if (current && binding.panel != unavailable && !binding.panel.evicted) {
             panel = binding.panel;
         } else {
-            NBTTagCompound snapshot = tile.getSnapshot();
-            Key key = new Key(snapshot, tile.getSettings());
+            // Over capacity, the tile keeps its key so it can join an identical panel, or retry once a slot frees,
+            // without copying the snapshot every frame.
+            Key key = current && binding.panel == unavailable ? binding.key
+                : new Key(tile.getSnapshot(), tile.getSettings());
             panel = panels.get(key);
             if (panel == null) {
                 if (panels.size() >= MAX_PANELS) {
-                    bindings.put(tile, new Binding(tile.contentVersion(), unavailable));
+                    if (!current || binding.panel != unavailable) {
+                        bindings.put(tile, new Binding(tile.contentVersion(), unavailable, key));
+                    }
                     return unavailable;
                 }
-                panel = new Panel(snapshot, key.settings);
+                panel = new Panel(key.snapshot, key.settings);
                 panels.put(key, panel);
             }
-            bindings.put(tile, new Binding(tile.contentVersion(), panel));
+            bindings.put(tile, new Binding(tile.contentVersion(), panel, key));
         }
         panel.lastSeen = System.nanoTime();
         panel.lastSeenFrame = frame;
@@ -203,12 +205,14 @@ public final class PanelFboManager {
 
         private final long contentVersion;
         private final Panel panel;
+        private final Key key;
         private long visibilityTick = -1;
         private boolean unobstructed;
 
-        private Binding(long contentVersion, Panel panel) {
+        private Binding(long contentVersion, Panel panel, Key key) {
             this.contentVersion = contentVersion;
             this.panel = panel;
+            this.key = key;
         }
     }
 

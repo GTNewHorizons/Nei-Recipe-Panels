@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.util.Map;
 
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
@@ -87,6 +88,27 @@ class PanelFboManagerTest {
     }
 
     @Test
+    void identicalPanelsWaitingForCapacityShareTheFreedSlot() throws ReflectiveOperationException {
+        for (int i = 0; i < 128; i++) manager.visible(tile("Filler " + i));
+        CountingTile first = tile("Waiting recipe");
+        CountingTile second = tile("Waiting recipe");
+        PanelFboManager.Panel unavailable = manager.visible(first);
+        assertSame(unavailable, manager.visible(second));
+
+        Field panels = PanelFboManager.class.getDeclaredField("panels");
+        panels.setAccessible(true);
+        Map<?, ?> cache = (Map<?, ?>) panels.get(manager);
+        cache.remove(
+            cache.keySet()
+                .iterator()
+                .next());
+
+        PanelFboManager.Panel shared = manager.visible(first);
+        assertNotSame(unavailable, shared);
+        assertSame(shared, manager.visible(second));
+    }
+
+    @Test
     void animationVisibilityPreservesTheCameraForAdjacentPanels() throws ReflectiveOperationException {
         Field singleton = Unsafe.class.getDeclaredField("theUnsafe");
         singleton.setAccessible(true);
@@ -153,9 +175,13 @@ class PanelFboManagerTest {
     }
 
     private static CountingTile tile() {
+        return tile("Fixture recipe");
+    }
+
+    private static CountingTile tile(String recipeId) {
         CountingTile tile = new CountingTile();
         NBTTagCompound snapshot = new NBTTagCompound();
-        snapshot.setString("recipeId", "Fixture recipe");
+        snapshot.setString("recipeId", recipeId);
         tile.setSnapshot(snapshot);
         return tile;
     }
