@@ -7,7 +7,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.WeakHashMap;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.audio.PositionedSoundRecord;
@@ -46,29 +45,34 @@ public final class DiagramPanelButtons
     private static final Field Y_SIZE = ReflectionHelper.findField(GuiContainer.class, "ySize", "field_147000_g");
     private static final Field CONTAINER = findContainer();
 
-    private final Map<IRecipeHandler, Map<Integer, Entry>> entries = new WeakHashMap<>();
+    // Buttons hold their handler, so only the handler on screen is cached; switching or leaving drops it.
+    private IRecipeHandler cachedHandler;
+    private final Map<Integer, Entry> entries = new HashMap<>();
     private final List<Entry> shown = new ArrayList<>();
     private boolean warned;
 
     @Override
     public void renderObjects(GuiContainer gui, int mouseX, int mouseY) {
         shown.clear();
-        if (!(gui instanceof GuiRecipe)) return;
-        GuiRecipe<?> screen = (GuiRecipe<?>) gui;
-        IRecipeHandler handler = screen.getHandler();
+        IRecipeHandler handler = gui instanceof GuiRecipe ? ((GuiRecipe<?>) gui).getHandler() : null;
+        if (handler != cachedHandler) {
+            entries.clear();
+            cachedHandler = null;
+        }
         if (!DiagramHandlers.isDiagram(handler)) return;
+        GuiRecipe<?> screen = (GuiRecipe<?>) gui;
+        cachedHandler = handler;
         try {
             int left = GUI_LEFT.getInt(gui);
             int top = GUI_TOP.getInt(gui);
             Rectangle4i view = viewport(screen, left, top);
             HandlerInfo info = GuiRecipeTab.getHandlerInfo(handler);
-            Map<Integer, Entry> byIndex = entries.computeIfAbsent(handler, ignored -> new HashMap<>());
             GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_CURRENT_BIT);
             try {
                 GL11.glDisable(GL11.GL_LIGHTING);
                 GL11.glDisable(GL11.GL_DEPTH_TEST);
                 for (int index : screen.getRecipeIndices()) {
-                    Entry entry = byIndex.computeIfAbsent(index, i -> create(handler, i, info));
+                    Entry entry = entries.computeIfAbsent(index, i -> create(handler, i, info));
                     Point position = screen.getRecipePosition(index);
                     int x = left + position.x + entry.x;
                     int y = top + position.y - info.getYShift() + entry.y;
