@@ -202,11 +202,51 @@ class RecipeResolverTest {
         RecipeResolver resolver = new RecipeResolver(
             (id, anchor) -> Collections.singletonList(handler(sameRecipe, sameRecipe)),
             () -> true,
-            (a, b) -> false);
+            matches -> false);
 
         RecipeResolver.Resolution resolution = resolver.resolveFresh(document(handler(sameRecipe)));
 
         assertEquals(RecipeResolver.Status.AMBIGUOUS, resolution.status());
+    }
+
+    @Test
+    void appearanceIsComparedOnceForTheWholeGroup() {
+        FixtureRecipe sameRecipe = recipe(slot(fixture.stack(first, 1)), slot(fixture.stack(output, 1)));
+        int[] calls = { 0 };
+        RecipeResolver resolver = new RecipeResolver(
+            (id, anchor) -> Collections.singletonList(handler(sameRecipe, sameRecipe, sameRecipe)),
+            () -> true,
+            matches -> {
+                calls[0]++;
+                return true;
+            });
+
+        assertEquals(
+            RecipeResolver.Status.READY,
+            resolver.resolveFresh(document(handler(sameRecipe)))
+                .status());
+        assertEquals(1, calls[0]);
+    }
+
+    @Test
+    void tooManyDuplicatesStayAmbiguousWithoutRendering() {
+        FixtureRecipe sameRecipe = recipe(slot(fixture.stack(first, 1)), slot(fixture.stack(output, 1)));
+        FixtureRecipe[] copies = new FixtureRecipe[RecipeResolver.MAX_COMPARED_DUPLICATES + 1];
+        Arrays.fill(copies, sameRecipe);
+        int[] calls = { 0 };
+        RecipeResolver resolver = new RecipeResolver(
+            (id, anchor) -> Collections.singletonList(handler(copies)),
+            () -> true,
+            matches -> {
+                calls[0]++;
+                return true;
+            });
+
+        assertEquals(
+            RecipeResolver.Status.AMBIGUOUS,
+            resolver.resolveFresh(document(handler(sameRecipe)))
+                .status());
+        assertEquals(0, calls[0]);
     }
 
     @Test

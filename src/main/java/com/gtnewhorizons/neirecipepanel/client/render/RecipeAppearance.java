@@ -1,6 +1,7 @@
 package com.gtnewhorizons.neirecipepanel.client.render;
 
 import java.util.Arrays;
+import java.util.List;
 
 import com.gtnewhorizons.neirecipepanel.NEIRecipePanelsMod;
 import com.gtnewhorizons.neirecipepanel.client.recipe.ResolvedRecipe;
@@ -14,10 +15,17 @@ public final class RecipeAppearance {
 
     private RecipeAppearance() {}
 
-    /** False whenever the comparison can't be made (no framebuffers, capture failed), so callers stay cautious. */
-    public static boolean same(RecipeHandlerRef first, RecipeHandlerRef second) {
-        byte[] a = image(first);
-        return a != null && Arrays.equals(a, image(second));
+    /**
+     * Renders the first recipe once and compares the others against it, stopping at the first difference. False
+     * whenever a comparison can't be made (no framebuffers, capture failed), so callers stay cautious.
+     */
+    public static boolean allSame(List<RecipeHandlerRef> recipes) {
+        byte[] reference = image(recipes.get(0));
+        if (reference == null) return false;
+        for (int i = 1; i < recipes.size(); i++) {
+            if (!Arrays.equals(reference, image(recipes.get(i)))) return false;
+        }
+        return true;
     }
 
     private static byte[] image(RecipeHandlerRef ref) {

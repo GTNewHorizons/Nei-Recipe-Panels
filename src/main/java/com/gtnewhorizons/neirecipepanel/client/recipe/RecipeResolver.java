@@ -7,8 +7,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiFunction;
-import java.util.function.BiPredicate;
 import java.util.function.BooleanSupplier;
+import java.util.function.Predicate;
 
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
@@ -35,14 +35,16 @@ public final class RecipeResolver {
     public static final RecipeResolver INSTANCE = new RecipeResolver(
         (id, output) -> GuiCraftingRecipe.getCraftingHandlers("recipeId", output, id),
         NEIClientConfig::isLoaded,
-        RecipeAppearance::same);
+        RecipeAppearance::allSame);
     private static final int MAX_CACHED_RECIPES = 128;
     private static final int MAX_CANDIDATES = 16384;
     private static final int MAX_OUTPUT_ANCHORS = 16;
+    /** Each compared duplicate costs an offscreen render and readback; real duplicates come in pairs. */
+    static final int MAX_COMPARED_DUPLICATES = 4;
     private final Map<NBTTagCompound, Resolution> cache = new LinkedHashMap<>(16, 0.75F, true);
     private final BiFunction<Recipe.RecipeId, ItemStack, List<ICraftingHandler>> craftingLookup;
     private final BooleanSupplier handlersLoaded;
-    private final BiPredicate<RecipeHandlerRef, RecipeHandlerRef> sameAppearance;
+    private final Predicate<List<RecipeHandlerRef>> sameAppearance;
 
     RecipeResolver(BiFunction<Recipe.RecipeId, ItemStack, List<ICraftingHandler>> craftingLookup) {
         this(craftingLookup, () -> true);
@@ -50,11 +52,11 @@ public final class RecipeResolver {
 
     RecipeResolver(BiFunction<Recipe.RecipeId, ItemStack, List<ICraftingHandler>> craftingLookup,
         BooleanSupplier handlersLoaded) {
-        this(craftingLookup, handlersLoaded, (a, b) -> true);
+        this(craftingLookup, handlersLoaded, matches -> true);
     }
 
     RecipeResolver(BiFunction<Recipe.RecipeId, ItemStack, List<ICraftingHandler>> craftingLookup,
-        BooleanSupplier handlersLoaded, BiPredicate<RecipeHandlerRef, RecipeHandlerRef> sameAppearance) {
+        BooleanSupplier handlersLoaded, Predicate<List<RecipeHandlerRef>> sameAppearance) {
         this.craftingLookup = craftingLookup;
         this.handlersLoaded = handlersLoaded;
         this.sameAppearance = sameAppearance;
@@ -189,16 +191,14 @@ public final class RecipeResolver {
      * GregTech EU/t and duration), so stacks alone can't prove two recipes equivalent. Otherwise stay ambiguous.
      */
     private boolean identical(List<RecipeHandlerRef> matches) {
+        if (matches.size() > MAX_COMPARED_DUPLICATES) return false;
         RecipeHandlerRef first = matches.get(0);
         NBTTagCompound fingerprint = fingerprint(first.handler, first.recipeIndex);
         for (int i = 1; i < matches.size(); i++) {
             RecipeHandlerRef match = matches.get(i);
             if (!fingerprint.equals(fingerprint(match.handler, match.recipeIndex))) return false;
         }
-        for (int i = 1; i < matches.size(); i++) {
-            if (!sameAppearance.test(first, matches.get(i))) return false;
-        }
-        return true;
+        return sameAppearance.test(matches);
     }
 
     private static NBTTagCompound fingerprint(IRecipeHandler handler, int index) {
