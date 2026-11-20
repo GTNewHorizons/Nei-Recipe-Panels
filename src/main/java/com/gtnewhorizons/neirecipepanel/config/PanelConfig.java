@@ -75,12 +75,12 @@ public final class PanelConfig {
         @Config.Comment("Video memory budget for cached panel images. Panels beyond it show a capacity notice.")
         @Config.DefaultInt(128)
         @Config.RangeInt(min = 32, max = 4096)
-        public static int textureBudgetMB = 256;
+        public static int textureBudgetMB = 128;
 
         @Config.Comment("Panel image resolution multiplier. Lower values fit more panels in the same budget.")
         @Config.DefaultInt(2)
         @Config.RangeInt(min = 1, max = 4)
-        public static int supersample = 3;
+        public static int supersample = 2;
 
         @Config.Comment("Only show the NEI imprint button when you are allowed to imprint (a Recipe Blueprint in your inventory, or creative mode).")
         @Config.DefaultBoolean(true)

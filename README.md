@@ -30,9 +30,9 @@ re-imprint it to choose a replacement.
   EVERYONE). Synced to clients.
 - `server.consumeInCreative` (default false): creative imprints spend a blueprint. Synced.
 - `server.maxIngredients`, `server.maxSnapshotBytes`: limits on imprinted recipe data.
-- `client.textureBudgetMB` (default 192): video memory for cached panel images; panels
+- `client.textureBudgetMB` (default 128): video memory for cached panel images; panels
   beyond it show a capacity notice.
-- `client.supersample` (default 3): panel image resolution; lower fits more panels.
+- `client.supersample` (default 2): panel image resolution; lower fits more panels.
 - `client.buttonRequiresBlueprint` (default true): set false to always show the NEI button.
 
 ## License
