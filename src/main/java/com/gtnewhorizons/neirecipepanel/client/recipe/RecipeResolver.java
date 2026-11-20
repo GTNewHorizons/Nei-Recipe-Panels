@@ -117,7 +117,7 @@ public final class RecipeResolver {
                 if (inputs && matchesOutputs(outputs, snapshot.outputs())) exact.add(candidate);
                 // After a pack update, keep a changed recipe only with a second signal: the same inputs or the same
                 // main result. Sharing one byproduct alone could reopen an unrelated recipe.
-                else if (inputs || accepts(outputs, StackIdentity.of(id.getResult()))) candidates.add(candidate);
+                else if (inputs || producesSavedResult(outputs, snapshot, id)) candidates.add(candidate);
             }
             List<RecipeHandlerRef> matches = exact.isEmpty() ? candidates : exact;
             if (matches.isEmpty()) return Resolution.failed(Status.MISSING);
@@ -249,6 +249,18 @@ public final class RecipeResolver {
             } else choices.add(new RecipeSnapshot.Selection(0, 0, identity));
         }
         return id.isShapedRecipe() || allMatched(ChoiceMatcher.match(choices, optionSlots(slots)));
+    }
+
+    private static boolean producesSavedResult(List<PositionedStack> outputs, RecipeSnapshot snapshot,
+        Recipe.RecipeId id) {
+        if (snapshot.result() != null) return accepts(outputs, StackIdentity.of(id.getResult()));
+        // Without a result slot, NEI's result is only the first output, possibly a byproduct: require two of the
+        // saved outputs (or the only one).
+        List<NBTTagCompound> saved = snapshot.outputs();
+        int needed = Math.min(2, saved.size());
+        int found = 0;
+        for (NBTTagCompound identity : saved) if (accepts(outputs, identity) && ++found >= needed) return true;
+        return false;
     }
 
     private static boolean matchesOutputs(List<PositionedStack> outputs, List<NBTTagCompound> identities) {
