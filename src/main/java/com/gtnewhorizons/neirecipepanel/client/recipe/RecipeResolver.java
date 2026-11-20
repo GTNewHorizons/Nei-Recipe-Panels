@@ -255,12 +255,13 @@ public final class RecipeResolver {
         Recipe.RecipeId id) {
         if (snapshot.result() != null) return accepts(outputs, StackIdentity.of(id.getResult()));
         // Without a result slot, NEI's result is only the first output, possibly a byproduct: require two of the
-        // saved outputs (or the only one).
+        // saved outputs (or the only one), each in its own live slot.
         List<NBTTagCompound> saved = snapshot.outputs();
-        int needed = Math.min(2, saved.size());
-        int found = 0;
-        for (NBTTagCompound identity : saved) if (accepts(outputs, identity) && ++found >= needed) return true;
-        return false;
+        List<RecipeSnapshot.Selection> choices = new ArrayList<>();
+        for (NBTTagCompound identity : saved) choices.add(new RecipeSnapshot.Selection(0, 0, identity));
+        int matched = 0;
+        for (int owner : ChoiceMatcher.match(choices, optionSlots(outputs))) if (owner >= 0) matched++;
+        return matched >= Math.min(2, saved.size());
     }
 
     private static boolean matchesOutputs(List<PositionedStack> outputs, List<NBTTagCompound> identities) {

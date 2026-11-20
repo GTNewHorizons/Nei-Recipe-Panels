@@ -203,6 +203,27 @@ class RecipeResolverTest {
     }
 
     @Test
+    void oneLiveSlotCannotMatchTwoSavedOutputs() {
+        Handler original = handler(
+            multiOutput(
+                slot(fixture.stack(first, 1)),
+                slot(fixture.stack(byproduct, 1)),
+                slot(fixture.stack(byproduct, 1)),
+                slot(fixture.stack(output, 1))));
+        Item unrelated = fixture.item("unrelated");
+        Handler current = handler(
+            multiOutput(
+                slot(fixture.stack(second, 1)),
+                slot(fixture.stack(byproduct, 1)),
+                slot(fixture.stack(unrelated, 1))));
+
+        RecipeResolver.Resolution resolution = resolver(current).resolveFresh(document(original));
+
+        assertEquals(RecipeResolver.Status.MISSING, resolution.status());
+        assertNull(resolution.recipe());
+    }
+
+    @Test
     void duplicatesWithDifferentOutputChanceStayAmbiguous() {
         FixtureRecipe quarter = recipe(slot(fixture.stack(first, 1)), chance(slot(fixture.stack(output, 1)), 2500));
         FixtureRecipe threeQuarters = recipe(
